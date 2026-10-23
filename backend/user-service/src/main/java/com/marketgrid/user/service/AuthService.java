@@ -1,0 +1,106 @@
+package com.marketgrid.user.service;
+
+import com.marketgrid.user.dto.LoginRequest;
+import com.marketgrid.user.dto.LoginResponse;
+import com.marketgrid.user.dto.RegisterRequest;
+import com.marketgrid.user.entity.User;
+import com.marketgrid.user.repository.UserRepository;
+import com.marketgrid.user.security.JwtUtil;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder;
+
+    public AuthService(
+            UserRepository userRepository,
+            JwtUtil jwtUtil,
+            PasswordEncoder passwordEncoder) {
+
+        this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    public User register(RegisterRequest request) {
+
+        if (userRepository.findByEmailAndTenantId(
+                request.getEmail(),
+                request.getTenantId()
+        ).isPresent()) {
+
+            throw new RuntimeException(
+                    "User already exists for this tenant"
+            );
+        }
+
+        User user = new User();
+
+        user.setTenantId(request.getTenantId());
+        user.setFullName(request.getFullName());
+        user.setEmail(request.getEmail());
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        request.getPassword()
+                )
+        );
+
+        String role = request.getRole();
+        if (!"VENDOR".equals(role)) {
+            role = "CUSTOMER";
+        }
+        user.setRole(role);
+        user.setActive(true);
+
+        return userRepository.save(user);
+    }
+
+    public LoginResponse login(LoginRequest request) {
+
+        User user = userRepository
+                .findByEmailAndTenantId(
+                        request.getEmail(),
+                        request.getTenantId()
+                )
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Invalid email, password or tenant"
+                        )
+                );
+
+        if (!user.isActive()) {
+            throw new RuntimeException(
+                    "User account is inactive"
+            );
+        }
+
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPassword())) {
+
+            throw new RuntimeException(
+                    "Invalid email, password or tenant"
+            );
+        }
+
+        String token = jwtUtil.generateToken(
+                user.getId(),
+                user.getTenantId(),
+                user.getEmail(),
+                user.getRole()
+        );
+
+        return new LoginResponse(
+                token,
+                user.getId(),
+                user.getTenantId(),
+                user.getEmail(),
+                user.getRole()
+        );
+    }
+}
