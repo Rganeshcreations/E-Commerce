@@ -1,56 +1,10 @@
-import React,{useMemo,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
 import {Link} from "react-router-dom";
+import {api} from "../services/api";
 import {
   Package,RefreshCw,ChevronRight,ShoppingBag,
   Clock3,Truck,CheckCircle2,IndianRupee,UserRound
 } from "lucide-react";
-
-const dummyOrders=[
-  {
-    id:108,
-    customerId:15,
-    status:"PLACED",
-    customer:"Rahul Kumar",
-    date:"25 Sep 2026",
-    items:[
-      {productId:1,productName:"Gaming Laptop",vendorId:1,quantity:1,price:65000}
-    ],
-    totalAmount:65000
-  },
-  {
-    id:107,
-    customerId:12,
-    status:"CONFIRMED",
-    customer:"Priya Sharma",
-    date:"24 Sep 2026",
-    items:[
-      {productId:1,productName:"Gaming Laptop",vendorId:1,quantity:2,price:65000}
-    ],
-    totalAmount:130000
-  },
-  {
-    id:106,
-    customerId:8,
-    status:"SHIPPED",
-    customer:"Arjun Reddy",
-    date:"23 Sep 2026",
-    items:[
-      {productId:1,productName:"Gaming Laptop",vendorId:1,quantity:1,price:65000}
-    ],
-    totalAmount:65000
-  },
-  {
-    id:105,
-    customerId:6,
-    status:"DELIVERED",
-    customer:"Suresh Kumar",
-    date:"22 Sep 2026",
-    items:[
-      {productId:1,productName:"Gaming Laptop",vendorId:1,quantity:1,price:65000}
-    ],
-    totalAmount:65000
-  }
-];
 
 const statusInfo={
   PLACED:{label:"New Order",icon:Clock3},
@@ -60,8 +14,26 @@ const statusInfo={
 };
 
 export default function VendorOrders(){
-  const [orders,setOrders]=useState(dummyOrders);
+  const [orders,setOrders]=useState([]);
   const [filter,setFilter]=useState("ALL");
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  const refresh=async()=>{
+    setLoading(true);
+    setError("");
+    try{
+      const data=await api.orders();
+      setOrders(Array.isArray(data)?data:[]);
+      setFilter("ALL");
+    }catch(e){
+      setError(e.message||"Unable to load vendor orders.");
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  useEffect(()=>{refresh();},[]);
 
   const stats=useMemo(()=>({
     total:orders.length,
@@ -73,11 +45,6 @@ export default function VendorOrders(){
   const visible=filter==="ALL"
     ? orders
     : orders.filter(o=>o.status===filter);
-
-  const refresh=()=>{
-    setOrders([...dummyOrders]);
-    setFilter("ALL");
-  };
 
   const money=n=>"₹"+Number(n||0).toLocaleString("en-IN");
 
@@ -147,6 +114,9 @@ export default function VendorOrders(){
           Refresh
         </button>
       </div>
+
+      {error&&<div role="alert" style={{background:"#fff0f0",border:"1px solid #ffd0d0",color:"#c43d3d",borderRadius:12,padding:14,marginBottom:20}}>{error}</div>}
+      {loading&&<div style={{background:"#fff",padding:18,borderRadius:12,marginBottom:20}}>Loading orders from the backend...</div>}
 
       {/* SUMMARY CARDS */}
       <div style={{
@@ -229,7 +199,7 @@ export default function VendorOrders(){
         gap:"16px"
       }}>
 
-        {visible.map(order=>{
+        {!loading&&visible.map(order=>{
           const info=statusInfo[order.status]||statusInfo.PLACED;
           const StatusIcon=info.icon;
 
@@ -296,7 +266,7 @@ export default function VendorOrders(){
                       <span>•</span>
                       Customer #{order.customerId}
                       <span>•</span>
-                      {order.date}
+                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN") : "Recent order"}
                     </div>
                   </div>
                 </div>
@@ -466,7 +436,7 @@ export default function VendorOrders(){
           );
         })}
 
-        {visible.length===0&&(
+        {!loading&&!error&&visible.length===0&&(
           <div style={{
             background:"#fff",
             border:"1px solid #e3e8f1",
