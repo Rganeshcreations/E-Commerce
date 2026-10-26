@@ -80,6 +80,54 @@ public class InternalProvisioningController {
                 .body(new ProvisioningResponse(saved.getId(), saved.getTenantId(), saved.getEmail(), saved.getRole()));
     }
 
+    /**
+     * Promote an existing applicant account after the Tenant Service approves its application.
+     * This updates the existing row and never creates a second login account.
+     */
+    @PostMapping("/accounts/{userId}/promote")
+    public ResponseEntity<ProvisioningResponse> promoteApplicant(
+            @RequestHeader(value = "X-MarketGrid-Service-Secret", required = false) String suppliedSecret,
+            @PathVariable Long userId,
+            @RequestBody PromotionRequest request) {
+        if (sharedSecret.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Internal account provisioning is not configured");
+        }
+        if (suppliedSecret == null || !MessageDigest.isEqual(
+                sharedSecret.getBytes(StandardCharsets.UTF_8),
+                suppliedSecret.getBytes(StandardCharsets.UTF_8))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Service authentication failed");
+        }
+        if (request == null || request.getTenantId() == null || request.getTenantId() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid tenant ID is required");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Applicant account not found"));
+
+        if ("TENANT_ADMIN".equals(user.getRole()) && request.getTenantId().equals(user.getTenantId())) {
+            return ResponseEntity.ok(new ProvisioningResponse(
+                    user.getId(), user.getTenantId(), user.getEmail(), user.getRole()));
+        }
+        if (!"TENANT_APPLICANT".equals(user.getRole()) || user.getTenantId() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only an unassigned tenant applicant can be promoted");
+        }
+
+        user.setTenantId(request.getTenantId());
+        user.setRole("TENANT_ADMIN");
+        User saved = userRepository.save(user);
+        return ResponseEntity.ok(new ProvisioningResponse(
+                saved.getId(), saved.getTenantId(), saved.getEmail(), saved.getRole()));
+    }
+
+    public static class PromotionRequest {
+        private Long tenantId;
+        public PromotionRequest() {}
+        public Long getTenantId() { return tenantId; }
+        public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    }
+
     public static class ProvisioningResponse {
         private final Long userId;
         private final Long tenantId;
