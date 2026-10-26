@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
@@ -6,6 +6,7 @@ import {
   Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
 } from "lucide-react";
 import "./index.css";
+import { api } from "./services/api";
 import VendorDashboard from "./pages/VendorDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
@@ -1133,91 +1134,54 @@ function CustomerShop() {
   const cartCount = useCartCount();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState([
-    {
-      id: 1,
-      name: "Gaming Laptop",
-      vendor: "Tech Store",
-      price: 65000,
-      stock: 10,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 2,
-      name: "Mechanical Keyboard",
-      vendor: "Gear Hub",
-      price: 2500,
-      stock: 25,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 3,
-      name: "Wireless Mouse",
-      vendor: "Tech Store",
-      price: 1200,
-      stock: 40,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 4,
-      name: "Smart Watch",
-      vendor: "DigitalMart",
-      price: 4500,
-      stock: 12,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 5,
-      name: "Wireless Headphones",
-      vendor: "AudioHub",
-      price: 3500,
-      stock: 18,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 6,
-      name: "Smartphone",
-      vendor: "Mobile World",
-      price: 28000,
-      stock: 15,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 7,
-      name: "Digital Camera",
-      vendor: "PhotoPro",
-      price: 42000,
-      stock: 8,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 8,
-      name: "Bluetooth Speaker",
-      vendor: "SoundMax",
-      price: 3200,
-      stock: 22,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 9,
-      name: "Tablet",
-      vendor: "Smart World",
-      price: 18000,
-      stock: 14,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=800&q=80"
-    }
-  ]);
-
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
   const [addedId, setAddedId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCatalog() {
+      setProductsLoading(true);
+      setProductsError("");
+      try {
+        const [catalog, vendors] = await Promise.all([
+          api.products(),
+          api.vendors()
+        ]);
+        const vendorById = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const liveProducts = (Array.isArray(catalog) ? catalog : [])
+          .filter(product =>
+            String(product.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          )
+          .map(product => ({
+            id: product.id,
+            vendorId: product.vendorId,
+            tenantId: product.tenantId,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorById.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            price: Number(product.price),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            status: product.status || "ACTIVE",
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) setProducts(liveProducts);
+      } catch (error) {
+        if (active) setProductsError(error.message || "Could not load products from the marketplace.");
+      } finally {
+        if (active) setProductsLoading(false);
+      }
+    }
+
+    loadCatalog();
+    return () => { active = false; };
+  }, []);
 
   function addToCart(product) {
     if (product.stock <= 0) return;
@@ -1230,8 +1194,7 @@ function CustomerShop() {
     } else {
       cart.push({
         ...product,
-        quantity: 1,
-        vendorId: product.vendorId || product.id
+        quantity: 1
       });
     }
 
@@ -1281,6 +1244,16 @@ function CustomerShop() {
         <button className="filter">Sort: Popular</button>
 
       </div>
+
+      {productsLoading && <div className="empty-card">Loading products from this store...</div>}
+      {productsError && <div className="info-box">{productsError}</div>}
+      {!productsLoading && !productsError && products.length === 0 && (
+        <div className="empty-card">
+          <Package size={36}/>
+          <h2>No active products yet</h2>
+          <p>This tenant does not currently have products available for sale.</p>
+        </div>
+      )}
 
       <div className="product-grid">
 
@@ -1672,47 +1645,106 @@ function Checkout() {
     setForm(prev => ({ ...prev, [name]: value }));
   }
 
-  function placeOrder() {
+  const [checkoutError, setCheckoutError] = useState("");
+  const [orderId, setOrderId] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState("SUCCESS");
+
+  async function placeOrder() {
+    setCheckoutError("");
+
     if (
-      !form.fullName ||
-      !form.phone ||
-      !form.address ||
-      !form.city ||
-      !form.pincode
+      !form.fullName.trim() ||
+      !form.phone.trim() ||
+      !/^\\d{10}$/.test(form.phone.trim()) ||
+      !form.address.trim() ||
+      !form.city.trim() ||
+      !/^\\d{6}$/.test(form.pincode.trim())
     ) {
-      alert("Please complete all delivery information.");
+      setCheckoutError("Enter your name, a valid 10-digit phone number, address, city, and 6-digit pincode.");
       return;
     }
 
     if (cart.length === 0) {
-      alert("Your cart is empty.");
+      setCheckoutError("Your cart is empty.");
       navigate("/shop/products");
       return;
     }
 
+    if (!localStorage.getItem("marketgrid_token")) {
+      setCheckoutError("Please sign in before placing an order.");
+      navigate("/login");
+      return;
+    }
+
     setProcessing(true);
+    try {
+      const tenantId = localStorage.getItem("marketgrid_tenant");
+      const customerId = localStorage.getItem("marketgrid_user_id");
+      const storedPending = JSON.parse(
+        localStorage.getItem("marketgrid_pending_checkout") || "null"
+      );
+      let order = null;
 
-    setTimeout(() => {
-      const txn = "TXN-DEMO-" + Date.now();
+      if (
+        storedPending?.orderId &&
+        String(storedPending.tenantId) === String(tenantId) &&
+        String(storedPending.customerId) === String(customerId)
+      ) {
+        order = { id: storedPending.orderId };
+      } else {
+        order = await api.createOrder({
+          items: cart.map(item => ({
+            productId: Number(item.id),
+            vendorId: Number(item.vendorId),
+            quantity: Number(item.quantity || 1)
+          }))
+        });
+        if (!order?.id) {
+          throw new Error("The order service did not return an order ID.");
+        }
+        localStorage.setItem("marketgrid_pending_checkout", JSON.stringify({
+          orderId: order.id,
+          tenantId,
+          customerId
+        }));
+      }
 
-      setTransactionId(txn);
+      setOrderId(order.id);
+      const payment = await api.createPayment({
+        orderId: order.id,
+        paymentMethod
+      });
+
+      const status = String(payment?.paymentStatus || "").toUpperCase();
+      if (!["SUCCESS", "PENDING"].includes(status)) {
+        throw new Error("The payment service returned an unexpected payment status.");
+      }
+
+      setPaymentStatus(status);
+      setTransactionId(payment.transactionId || "Payment due on delivery");
       setProcessing(false);
       setSuccess(true);
 
-      localStorage.setItem(
-        "marketgrid_last_order",
-        JSON.stringify({
-          items: cart,
-          total,
-          paymentMethod,
-          transactionId: txn,
-          delivery: form,
-          createdAt: new Date().toISOString()
-        })
-      );
-
+      localStorage.setItem("marketgrid_last_order", JSON.stringify({
+        orderId: order.id,
+        items: cart,
+        total: Number(order.totalAmount ?? total),
+        paymentMethod,
+        paymentStatus: status,
+        transactionId: payment.transactionId || null,
+        delivery: form,
+        createdAt: new Date().toISOString()
+      }));
+      localStorage.removeItem("marketgrid_pending_checkout");
       saveCart([]);
-    }, 1200);
+    } catch (error) {
+      setCheckoutError(
+        error.message ||
+        "Could not complete checkout. Your cart has been kept so you can retry."
+      );
+    } finally {
+      setProcessing(false);
+    }
   }
 
   if (success) {
@@ -1728,17 +1760,18 @@ function Checkout() {
             ORDER CONFIRMED
           </span>
 
-          <h1>Payment Successful</h1>
+          <h1>{paymentStatus === "PENDING" ? "Order Confirmed — Pay on Delivery" : "Payment Successful"}</h1>
 
           <p>
-            Your order has been placed successfully.
-            We have recorded your payment and delivery information.
+            {paymentStatus === "PENDING"
+              ? "Your order has been placed. Payment is due when the order arrives."
+              : "Your order has been placed and the demo payment has been recorded."}
           </p>
 
           <div className="success-details">
             <div>
-              <span>Transaction ID</span>
-              <strong>{transactionId}</strong>
+              <span>Order ID / Transaction</span>
+              <strong>{orderId} / {transactionId}</strong>
             </div>
 
             <div>
@@ -2057,6 +2090,12 @@ function Checkout() {
             <span>Total</span>
             <strong>{formatINR(total)}</strong>
           </div>
+
+          {checkoutError && (
+            <div className="info-box" role="alert" style={{ marginBottom: "12px" }}>
+              {checkoutError}
+            </div>
+          )}
 
           <button
             className="checkout-place-btn"
