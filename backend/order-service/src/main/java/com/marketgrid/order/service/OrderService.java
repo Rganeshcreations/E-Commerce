@@ -64,6 +64,10 @@ public class OrderService {
 
         for (OrderItem item : order.getItems()) {
 
+            if (item.getProductId() == null || item.getVendorId() == null) {
+                throw new RuntimeException("Product ID and vendor ID are required for every order item");
+            }
+
             if (item.getQuantity() == null
                     || item.getQuantity() <= 0) {
 
