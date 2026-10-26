@@ -255,40 +255,92 @@ function AdminOrders(){
 }
 
 function AdminAnalytics(){
+  const [metrics,setMetrics]=useState({
+    orders:[],products:[],vendors:[],tenants:[],users:[]
+  });
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [refresh,setRefresh]=useState(0);
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);
+      setError("");
+      try{
+        const [orders,products,vendors,tenants,users]=await Promise.all([
+          api.orders(),api.products(),api.vendors(),api.tenants(),api.users()
+        ]);
+        if(active)setMetrics({
+          orders:Array.isArray(orders)?orders:[],
+          products:Array.isArray(products)?products:[],
+          vendors:Array.isArray(vendors)?vendors:[],
+          tenants:Array.isArray(tenants)?tenants:[],
+          users:Array.isArray(users)?users:[]
+        });
+      }catch(e){
+        if(active)setError(e.message||"Unable to load analytics from the backend.");
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    load();
+    return ()=>{active=false;};
+  },[refresh]);
+
+  const gmv=metrics.orders.reduce((sum,order)=>sum+Number(order.totalAmount||0),0);
+  const customers=metrics.users.filter(user=>user.role==="CUSTOMER").length;
+  const statuses=["PLACED","CONFIRMED","SHIPPED","DELIVERED","CANCELLED"];
+  const statusCounts=statuses.map(status=>({
+    status,
+    count:metrics.orders.filter(order=>String(order.status||"").toUpperCase()===status).length
+  }));
+  const maxCount=Math.max(1,...statusCounts.map(item=>item.count));
+
   return(
     <div style={page}>
-      <Header eyebrow="PLATFORM ANALYTICS" title="Analytics" desc="Monitor MarketGrid marketplace performance."/>
-
-      <div style={statsGrid}>
-        <Stat icon={<TrendingUp size={21}/>} title="GMV" value="₹8.4Cr"/>
-        <Stat icon={<ShoppingIcon/>} title="Orders" value="12,480"/>
-        <Stat icon={<Users size={21}/>} title="Customers" value="18,920"/>
-        <Stat icon={<Store size={21}/>} title="Tenants" value="128"/>
+      <Header eyebrow="PLATFORM ANALYTICS" title="Analytics" desc="Live totals calculated from the marketplace APIs."/>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}><RefreshCw size={16}/> Refresh</button>
       </div>
-
+      {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
+      <div style={statsGrid}>
+        <Stat icon={<TrendingUp size={21}/>} title="Order Value" value={loading?"—":"₹"+gmv.toLocaleString("en-IN")}/>
+        <Stat icon={<ShoppingIcon/>} title="Orders" value={loading?"—":metrics.orders.length}/>
+        <Stat icon={<Users size={21}/>} title="Customers" value={loading?"—":customers}/>
+        <Stat icon={<Store size={21}/>} title="Active Tenants" value={loading?"—":metrics.tenants.filter(tenant=>tenant.active).length}/>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:"20px"}}>
         <div style={chartCard}>
-          <h2>Marketplace Performance</h2>
-          <p>Monthly order activity</p>
-          <div style={bars}>
-            {[45,62,54,76,68,88,72,94,81,96,86,100].map((h,i)=>(
-              <div key={i} style={barWrap}>
-                <div style={{...bar,height:`${h}%`}}/>
-                <small>{["J","F","M","A","M","J","J","A","S","O","N","D"][i]}</small>
+          <h2>Orders by Status</h2>
+          <p>Calculated from current order records</p>
+          {loading?<p>Loading analytics...</p>:statusCounts.map(item=>(
+            <div key={item.status} style={{display:"grid",gridTemplateColumns:"90px 1fr 40px",gap:10,alignItems:"center",margin:"16px 0"}}>
+              <small>{item.status}</small>
+              <div style={{height:12,background:"#edf0f5",borderRadius:8,overflow:"hidden"}}>
+                <div style={{height:"100%",width:(item.count/maxCount*100)+"%",background:"#2864e6",borderRadius:8}}/>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={chartCard}>
-          <h2>Platform Health</h2>
-          <p>Current system status</p>
-          {["API Gateway","User Service","Product Service","Order Service","Payment Service","Eureka"].map(x=>(
-            <div key={x} style={health}>
-              <span>{x}</span>
-              <b><CheckCircle2 size={15}/> Operational</b>
+              <strong>{item.count}</strong>
             </div>
           ))}
+        </div>
+        <div style={chartCard}>
+          <h2>Data Connectivity</h2>
+          <p>Status of dashboard data requests</p>
+          {[
+            ["Products",metrics.products.length],
+            ["Vendors",metrics.vendors.length],
+            ["Tenants",metrics.tenants.length],
+            ["User Accounts",metrics.users.length]
+          ].map(([label,count])=>(
+            <div key={label} style={health}>
+              <span>{label}</span>
+              <b>{loading?"Loading…":count+" records"}</b>
+            </div>
+          ))}
+          <p style={{color:"#75839a",fontSize:12,marginTop:14}}>
+            This is API data availability, not a live health check of every microservice.
+          </p>
         </div>
       </div>
     </div>
