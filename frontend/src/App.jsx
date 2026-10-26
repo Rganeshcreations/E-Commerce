@@ -1722,8 +1722,9 @@ function Checkout() {
         throw new Error("The payment service returned an unexpected payment status.");
       }
 
+      const confirmedMethod = payment.paymentMethod || paymentMethod;
       setPaymentStatus(status);
-      setPaymentMethod(payment.paymentMethod || paymentMethod);
+      setPaymentMethod(confirmedMethod);
       setTransactionId(payment.transactionId || "Payment due on delivery");
       setProcessing(false);
       setSuccess(true);
@@ -1732,7 +1733,7 @@ function Checkout() {
         orderId: order.id,
         items: cart,
         total: Number(order.totalAmount ?? total),
-        paymentMethod,
+        paymentMethod: payment.paymentMethod || paymentMethod,
         paymentStatus: status,
         transactionId: payment.transactionId || null,
         delivery: form,
