@@ -30,6 +30,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     throw new Error(
       data?.message ||
+      data?.detail ||
       data?.error ||
       `Request failed (${response.status})`
     );
