@@ -38,6 +38,30 @@ async function request(path, options = {}) {
   return data;
 }
 
+export function getUser() {
+  const token = localStorage.getItem("marketgrid_token");
+  const role = localStorage.getItem("marketgrid_role");
+  if (!token || !role) return null;
+  return {
+    token,
+    role,
+    id: localStorage.getItem("marketgrid_user_id"),
+    userId: localStorage.getItem("marketgrid_user_id"),
+    tenantId: localStorage.getItem("marketgrid_tenant"),
+    email: localStorage.getItem("marketgrid_email") || ""
+  };
+}
+
+export function logout() {
+  [
+    "marketgrid_token", "marketgrid_role", "marketgrid_user_id",
+    "marketgrid_customer_id", "marketgrid_tenant", "marketgrid_email",
+    "marketgrid_user", "marketgrid_pending_checkout"
+  ].forEach(key => localStorage.removeItem(key));
+  localStorage.removeItem("marketgrid_cart");
+  window.dispatchEvent(new Event("marketgrid_cart_updated"));
+}
+
 export const api = {
   // Authentication
   login: (body) =>
