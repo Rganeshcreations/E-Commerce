@@ -107,9 +107,18 @@ export default function AdminManagement({type="tenants"}){
           <RefreshCw size={16}/> Refresh
         </button>
 
-        <button style={primary}>
-          <Plus size={17}/> {c.add}
-        </button>
+        {type==="products" ? null : (
+          <button
+            style={primary}
+            onClick={() => {
+              if (type === "vendors") window.location.assign("/admin/users");
+              else if (type === "tenants") window.location.assign("/admin/tenants");
+              else if (type === "users") window.location.assign("/admin/users");
+            }}
+          >
+            <Plus size={17}/> {c.add}
+          </button>
+        )}
       </div>
 
       <div style={tableCard}>
