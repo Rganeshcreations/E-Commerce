@@ -28,7 +28,8 @@ export default function Login() {
         tenantId: Number(form.tenantId)
       });
       login(data);
-      navigate("/vendor");
+      const destinations = { SUPER_ADMIN: "/admin", TENANT_ADMIN: "/admin", VENDOR: "/vendor", CUSTOMER: "/products" };
+      navigate(destinations[data.role] || "/login", { replace: true });
     } catch (err) {
       setError(err.message || "Unable to sign in.");
     } finally {
