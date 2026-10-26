@@ -1,12 +1,8 @@
 package com.marketgrid.payment.dto;
 
-import java.math.BigDecimal;
-
 public class PaymentRequest {
 
     private Long orderId;
-    private Long customerId;
-    private BigDecimal amount;
     private String paymentMethod;
 
     public Long getOrderId() {
@@ -15,22 +11,6 @@ public class PaymentRequest {
 
     public void setOrderId(Long orderId) {
         this.orderId = orderId;
-    }
-
-    public Long getCustomerId() {
-        return customerId;
-    }
-
-    public void setCustomerId(Long customerId) {
-        this.customerId = customerId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
     }
 
     public String getPaymentMethod() {
