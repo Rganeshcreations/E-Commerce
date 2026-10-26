@@ -20,6 +20,10 @@ public class TenantApplication {
     private String requestedSlug;
     @Column(nullable = false, length = 80)
     private String requestedDomainSlug;
+    @Column(name = "applicant_user_id")
+    private Long applicantUserId;
+
+    // Retained only so existing rows/schema migrate safely; new applications never store passwords.
     @Column(name = "applicant_password_hash", length = 100)
     private String applicantPasswordHash;
     @Enumerated(EnumType.STRING)
@@ -34,6 +38,8 @@ public class TenantApplication {
     public TenantApplication() {}
     @PrePersist protected void onCreate() { submittedAt = LocalDateTime.now(); }
     public Long getId() { return id; }
+    public Long getApplicantUserId() { return applicantUserId; }
+    public void setApplicantUserId(Long v) { applicantUserId = v; }
     public String getApplicantName() { return applicantName; }
     public void setApplicantName(String v) { applicantName = v; }
     public String getApplicantEmail() { return applicantEmail; }
