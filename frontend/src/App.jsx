@@ -519,10 +519,6 @@ function CustomerDashboard() {
   const navigate = useNavigate();
   const cartCount = useCartCount();
 
-  if (role !== "CUSTOMER") {
-    return <Navigate to="/login" replace />;
-  }
-
   const email = localStorage.getItem("marketgrid_email") || "";
   const customerName = formatDisplayName(email);
 
