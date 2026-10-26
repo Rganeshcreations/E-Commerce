@@ -129,12 +129,12 @@ export default function AdminUsers() {
       }
 
       setShowModal(false);
+      await loadUsers();
       setMessage(
         form.role === "VENDOR"
           ? "Vendor account and vendor profile created successfully."
           : "Customer account created successfully."
       );
-      await loadUsers();
     } catch (error) {
       setMessage(error.message);
     } finally {
