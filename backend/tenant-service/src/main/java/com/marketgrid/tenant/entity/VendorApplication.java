@@ -19,6 +19,8 @@ public class VendorApplication {
     private String tenantSlug;
     @Column(nullable = false, length = 120)
     private String businessName;
+    @Column(name = "applicant_password_hash", length = 100)
+    private String applicantPasswordHash;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -38,6 +40,8 @@ public class VendorApplication {
     public void setTenantSlug(String v) { tenantSlug = v; }
     public String getBusinessName() { return businessName; }
     public void setBusinessName(String v) { businessName = v; }
+    public String getApplicantPasswordHash() { return applicantPasswordHash; }
+    public void setApplicantPasswordHash(String v) { applicantPasswordHash = v; }
     public Status getStatus() { return status; }
     public void setStatus(Status v) { status = v; }
     public LocalDateTime getSubmittedAt() { return submittedAt; }
