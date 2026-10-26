@@ -8,7 +8,7 @@ export default function Login() {
   const [form, setForm] = useState({
     email: "",
     password: "",
-    tenantId: "1"
+    tenantId: ""
   });
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +84,7 @@ export default function Login() {
               onChange={e => setForm({...form,tenantId:e.target.value})}
               type="number"
               min="1"
+              placeholder="Enter your tenant ID"
               required
             />
           </div>
