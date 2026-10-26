@@ -192,6 +192,9 @@ export const api = {
   tenantApplications: () =>
     request("/api/tenant-applications"),
 
+  myTenantApplications: () =>
+    request("/api/tenant-applications/mine"),
+
   pendingTenantApplications: () =>
     request("/api/tenant-applications/pending"),
 
