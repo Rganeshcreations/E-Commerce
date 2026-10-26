@@ -177,14 +177,12 @@ public class OrderService {
         }
 
         if ("CUSTOMER".equals(role)) {
-
             Long customerId = extractUserId(authentication);
+            return orderRepository.findAllByTenantIdAndCustomerId(tenantId, customerId);
+        }
 
-            return orderRepository
-                    .findAllByTenantIdAndCustomerId(
-                            tenantId,
-                            customerId
-                    );
+        if ("SUPER_ADMIN".equals(role)) {
+            return orderRepository.findAll();
         }
 
         return orderRepository.findAllByTenantId(tenantId);
@@ -198,12 +196,10 @@ public class OrderService {
 
         String role = currentRole();
 
-        Order order = orderRepository
-                .findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Order not found"
-                        ));
+        Order order = "SUPER_ADMIN".equals(role)
+                ? orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Order not found"))
+                : orderRepository.findByIdAndTenantId(id, tenantId)
+                        .orElseThrow(() -> new RuntimeException("Order not found"));
 
         if ("CUSTOMER".equals(role)) {
 
