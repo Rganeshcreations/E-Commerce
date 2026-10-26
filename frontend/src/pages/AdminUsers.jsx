@@ -485,9 +485,9 @@ export default function AdminUsers() {
                     name="password"
                     value={form.password}
                     onChange={updateField}
-                    placeholder="Minimum 6 characters"
+                    placeholder="Minimum 8 characters"
                     style={{ paddingLeft: "38px" }}
-                    minLength="6"
+                    minLength="8"
                     required
                   />
                 </div>
