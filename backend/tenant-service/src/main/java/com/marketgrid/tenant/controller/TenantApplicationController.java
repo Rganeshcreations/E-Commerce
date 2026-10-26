@@ -10,88 +10,61 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/tenant-applications")
 public class TenantApplicationController {
-
     private final TenantApplicationService applicationService;
-
-    public TenantApplicationController(
-            TenantApplicationService applicationService) {
+    public TenantApplicationController(TenantApplicationService applicationService) {
         this.applicationService = applicationService;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TenantApplicationResponse submit(
-            @Valid @RequestBody SubmitTenantApplicationRequest request) {
-
-        TenantApplication application = applicationService.submit(
-                request.getApplicantName(),
-                request.getApplicantEmail(),
-                request.getStoreName(),
-                request.getRequestedSlug());
-
-        return new TenantApplicationResponse(application);
+    public TenantApplicationResponse submit(@Valid @RequestBody SubmitTenantApplicationRequest request) {
+        return new TenantApplicationResponse(applicationService.submit(
+            request.getApplicantName(), request.getApplicantEmail(), request.getStoreName(),
+            request.getRequestedSlug(), request.getRequestedDomainSlug()));
     }
 
     @GetMapping
     public List<TenantApplicationResponse> getAll() {
-        return applicationService.getAll().stream()
-                .map(TenantApplicationResponse::new)
-                .toList();
+        return applicationService.getAll().stream().map(TenantApplicationResponse::new).toList();
     }
 
     @GetMapping("/pending")
     public List<TenantApplicationResponse> getPending() {
-        return applicationService.getPending().stream()
-                .map(TenantApplicationResponse::new)
-                .toList();
+        return applicationService.getPending().stream().map(TenantApplicationResponse::new).toList();
     }
 
     @PostMapping("/{id}/approve")
     public TenantResponseWrapper approve(@PathVariable Long id) {
-        Tenant tenant = applicationService.approve(id);
-        return new TenantResponseWrapper(tenant);
+        return new TenantResponseWrapper(applicationService.approve(id));
     }
 
     @PostMapping("/{id}/reject")
-    public TenantApplicationResponse reject(
-            @PathVariable Long id,
+    public TenantApplicationResponse reject(@PathVariable Long id,
             @Valid @RequestBody RejectApplicationRequest request) {
-
-        return new TenantApplicationResponse(
-                applicationService.reject(id, request.getReason()));
+        return new TenantApplicationResponse(applicationService.reject(id, request.getReason()));
     }
 
     public static class RejectApplicationRequest {
-
-        @NotBlank
-        @Size(max = 1000)
+        @NotBlank @Size(max = 1000)
         private String reason;
-
         public RejectApplicationRequest() {}
-
         public String getReason() { return reason; }
         public void setReason(String reason) { this.reason = reason; }
     }
 
     public static class TenantResponseWrapper {
-        private Long id;
-        private String name;
-        private String slug;
-        private boolean active;
-
+        private final Long id;
+        private final String name;
+        private final String slug;
+        private final boolean active;
         public TenantResponseWrapper(Tenant tenant) {
-            this.id = tenant.getId();
-            this.name = tenant.getName();
-            this.slug = tenant.getSlug();
-            this.active = tenant.isActive();
+            id = tenant.getId(); name = tenant.getName(); slug = tenant.getSlug(); active = tenant.isActive();
         }
-
         public Long getId() { return id; }
         public String getName() { return name; }
         public String getSlug() { return slug; }
