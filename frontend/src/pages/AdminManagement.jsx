@@ -1,4 +1,5 @@
-import React,{useState} from "react";
+import React,{useEffect,useState} from "react";
+import { api } from "../services/api";
 import {
   Store,Users,Package,Truck,BarChart3,Settings,
   Search,Plus,RefreshCw,MoreHorizontal,ArrowUpRight,
@@ -6,38 +7,59 @@ import {
   TrendingUp,IndianRupee
 } from "lucide-react";
 
-const DATA={
-  tenants:[
-    {id:1,name:"Tech Store",owner:"Admin One",email:"admin@techstore.com",vendors:12,products:86,status:"ACTIVE"},
-    {id:2,name:"Gear Hub",owner:"Admin Two",email:"admin@gearhub.com",vendors:8,products:54,status:"ACTIVE"},
-    {id:3,name:"Smart World",owner:"Admin Three",email:"admin@smartworld.com",vendors:15,products:123,status:"ACTIVE"},
-    {id:4,name:"Digital Mart",owner:"Admin Four",email:"admin@digitalmart.com",vendors:6,products:41,status:"PENDING"}
-  ],
-  users:[
-    {id:7,name:"Super Admin",email:"superadmin@marketgrid.com",role:"SUPER_ADMIN",tenant:"Platform",status:"ACTIVE"},
-    {id:1,name:"Admin User",email:"admin@test.com",role:"TENANT_ADMIN",tenant:"Tech Store",status:"ACTIVE"},
-    {id:12,name:"Krishna",email:"krishna@gmail.com",role:"VENDOR",tenant:"Tech Store",status:"ACTIVE"},
-    {id:10,name:"Customer One",email:"customer@test.com",role:"CUSTOMER",tenant:"Tech Store",status:"ACTIVE"},
-    {id:15,name:"Rahul Kumar",email:"rahul@test.com",role:"CUSTOMER",tenant:"Gear Hub",status:"ACTIVE"}
-  ],
-  vendors:[
-    {id:1,name:"Krishna",business:"Tech Store",email:"krishna@gmail.com",products:2,orders:8,status:"ACTIVE"},
-    {id:2,name:"Ravi Kumar",business:"Gear Hub",email:"ravi@gearhub.com",products:14,orders:21,status:"ACTIVE"},
-    {id:3,name:"Suresh",business:"Smart World",email:"suresh@smartworld.com",products:9,orders:17,status:"ACTIVE"},
-    {id:4,name:"Anil",business:"Digital Mart",email:"anil@digitalmart.com",products:6,orders:11,status:"PENDING"}
-  ],
-  products:[
-    {id:1,name:"Gaming Laptop",vendor:"Tech Store",price:65000,stock:4,status:"ACTIVE"},
-    {id:2,name:"iPhone Flip",vendor:"Tech Store",price:0,stock:0,status:"ACTIVE"},
-    {id:3,name:"Mechanical Keyboard",vendor:"Gear Hub",price:2500,stock:19,status:"ACTIVE"},
-    {id:4,name:"Wireless Mouse",vendor:"Smart World",price:1200,stock:40,status:"ACTIVE"},
-    {id:5,name:"Gaming Monitor",vendor:"Digital Mart",price:18000,stock:12,status:"ACTIVE"}
-  ]
-};
-
 export default function AdminManagement({type="tenants"}){
   const [search,setSearch]=useState("");
   const [refresh,setRefresh]=useState(0);
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    let active=true;
+    async function loadRows(){
+      if(["orders","analytics","settings"].includes(type)){
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try{
+        let data=[];
+        if(type==="tenants"){
+          data=await api.tenants();
+          data=(Array.isArray(data)?data:[]).map(t=>({
+            id:t.id,name:t.name,owner:"—",email:t.ownerEmail||"—",
+            vendors:"—",products:"—",status:t.active?"ACTIVE":"INACTIVE",slug:t.slug
+          }));
+        }else if(type==="users"){
+          data=await api.users();
+          data=(Array.isArray(data)?data:[]).map(u=>({
+            id:u.id,name:u.fullName,email:u.email,role:u.role,
+            tenant:u.tenantId,status:u.active?"ACTIVE":"INACTIVE"
+          }));
+        }else if(type==="vendors"){
+          data=await api.vendors();
+          data=(Array.isArray(data)?data:[]).map(v=>({
+            id:v.id,name:v.vendorName,business:v.businessName,email:v.email,
+            products:"—",orders:"—",status:v.status||"ACTIVE",tenantId:v.tenantId
+          }));
+        }else if(type==="products"){
+          data=await api.products();
+          data=(Array.isArray(data)?data:[]).map(p=>({
+            id:p.id,name:p.productName,vendor:`Vendor #${p.vendorId}`,
+            price:p.price,stock:p.stockQuantity,status:p.status||"ACTIVE"
+          }));
+        }
+        if(active)setRows(data);
+      }catch(e){
+        if(active){setRows([]);setError(e.message||"Unable to load records from the backend.");}
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    loadRows();
+    return ()=>{active=false;};
+  },[type,refresh]);
 
   const config={
     tenants:{eyebrow:"TENANT MANAGEMENT",title:"Tenants",desc:"Manage independent stores across the MarketGrid platform.",icon:Store,add:"Add Tenant"},
@@ -54,7 +76,7 @@ export default function AdminManagement({type="tenants"}){
 
   const c=config[type];
   const Icon=c.icon;
-  const rows=DATA[type].filter(x=>
+  const filteredRows=rows.filter(x=>
     JSON.stringify(x).toLowerCase().includes(search.toLowerCase())
   );
 
@@ -63,11 +85,13 @@ export default function AdminManagement({type="tenants"}){
       <Header eyebrow={c.eyebrow} title={c.title} desc={c.desc}/>
 
       <div style={statsGrid}>
-        <Stat icon={<Icon size={21}/>} title={`Total ${c.title}`} value={DATA[type].length}/>
-        <Stat icon={<CheckCircle2 size={21}/>} title="Active" value={DATA[type].filter(x=>x.status==="ACTIVE").length}/>
-        <Stat icon={<Clock3 size={21}/>} title="Pending" value={DATA[type].filter(x=>x.status==="PENDING").length}/>
+        <Stat icon={<Icon size={21}/>} title={`Total ${c.title}`} value={loading?"—":rows.length}/>
+        <Stat icon={<CheckCircle2 size={21}/>} title="Active" value={loading?"—":rows.filter(x=>x.status==="ACTIVE").length}/>
+        <Stat icon={<Clock3 size={21}/>} title="Pending" value={loading?"—":rows.filter(x=>x.status==="PENDING").length}/>
         <Stat icon={<Activity size={21}/>} title="Platform Status" value="Healthy"/>
       </div>
+
+      {error && <div role="alert" style={{...tableCard,padding:"14px",marginBottom:"16px",color:"#b42318"}}>{error}</div>}
 
       <div style={toolbar}>
         <div style={searchBox}>
@@ -79,7 +103,7 @@ export default function AdminManagement({type="tenants"}){
           />
         </div>
 
-        <button style={secondary} onClick={()=>setRefresh(refresh+1)}>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}>
           <RefreshCw size={16}/> Refresh
         </button>
 
@@ -92,7 +116,7 @@ export default function AdminManagement({type="tenants"}){
         <div style={tableHead}>
           <div>
             <h2>{c.title} Directory</h2>
-            <p>{rows.length} records found</p>
+            <p>{loading?"Loading records...":`${filteredRows.length} records found`}</p>
           </div>
           <MoreHorizontal size={20} color="#8b98ac"/>
         </div>
@@ -109,7 +133,8 @@ export default function AdminManagement({type="tenants"}){
             </thead>
 
             <tbody>
-              {rows.map(x=>(
+              {loading && <tr><td colSpan="7" style={{textAlign:"center",padding:"28px"}}>Loading records from the server...</td></tr>}
+            {!loading && filteredRows.map(x=>(
                 <tr key={x.id}>
                   <td>#{x.id}</td>
 
@@ -151,6 +176,7 @@ export default function AdminManagement({type="tenants"}){
                   <td><button style={more}><MoreHorizontal size={17}/></button></td>
                 </tr>
               ))}
+              {!loading && !error && filteredRows.length===0 && <tr><td colSpan="7" style={{textAlign:"center",padding:"28px"}}>No records found.</td></tr>}
             </tbody>
           </table>
         </div>
