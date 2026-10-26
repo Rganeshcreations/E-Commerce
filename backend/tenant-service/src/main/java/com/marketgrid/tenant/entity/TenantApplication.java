@@ -20,6 +20,8 @@ public class TenantApplication {
     private String requestedSlug;
     @Column(nullable = false, length = 80)
     private String requestedDomainSlug;
+    @Column(name = "applicant_password_hash", length = 100)
+    private String applicantPasswordHash;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status = Status.PENDING;
@@ -42,6 +44,8 @@ public class TenantApplication {
     public void setRequestedSlug(String v) { requestedSlug = v; }
     public String getRequestedDomainSlug() { return requestedDomainSlug; }
     public void setRequestedDomainSlug(String v) { requestedDomainSlug = v; }
+    public String getApplicantPasswordHash() { return applicantPasswordHash; }
+    public void setApplicantPasswordHash(String v) { applicantPasswordHash = v; }
     public Status getStatus() { return status; }
     public void setStatus(Status v) { status = v; }
     public String getReviewNote() { return reviewNote; }
