@@ -2131,16 +2131,9 @@ function Orders() {
     setError("");
 
     try {
-      const response = await fetch(API + "/api/orders", {
-        headers: {
-          Authorization: "Bearer " + token
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to load orders");
+      const data = await api.orders();
+      if (!Array.isArray(data)) {
+        throw new Error("The Order Service returned an unexpected response.");
       }
 
       const customerOrders =
@@ -2767,28 +2760,12 @@ function Dashboard({ type }) {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("marketgrid_token");
-      const headers = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-
       try {
-        const results = await Promise.all([
-          fetch("http://localhost:8080/api/products", { headers }),
-          fetch("http://localhost:8080/api/vendors", { headers }),
-          fetch("http://localhost:8080/api/orders", { headers })
+        const [productData, vendorData, orderData] = await Promise.all([
+          api.products(),
+          api.vendors(),
+          api.orders()
         ]);
-
-        const failed = results.find(response => !response.ok);
-
-        if (failed) {
-          throw new Error(
-            `Dashboard API request failed (HTTP ${failed.status}).`
-          );
-        }
-
-        const [productData, vendorData, orderData] =
-          await Promise.all(results.map(response => response.json()));
 
         if (!Array.isArray(productData) ||
             !Array.isArray(vendorData) ||
