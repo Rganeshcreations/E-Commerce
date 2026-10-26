@@ -42,17 +42,44 @@ public class PaymentController {
     }
 
     @GetMapping
-    public List<Payment> getAllPayments() {
-        return paymentService.getAllPayments(TenantContext.getTenantId());
+    public List<Payment> getAllPayments(HttpServletRequest request) {
+        return paymentService.getAllPayments(
+                TenantContext.getTenantId(),
+                authenticatedUserId(request),
+                authenticatedRole(request)
+        );
     }
 
     @GetMapping("/{id}")
-    public Payment getPayment(@PathVariable Long id) {
-        return paymentService.getPayment(id, TenantContext.getTenantId());
+    public Payment getPayment(@PathVariable Long id, HttpServletRequest request) {
+        return paymentService.getPayment(
+                id, TenantContext.getTenantId(),
+                authenticatedUserId(request), authenticatedRole(request)
+        );
     }
 
     @GetMapping("/order/{orderId}")
-    public Payment getPaymentByOrder(@PathVariable Long orderId) {
-        return paymentService.getPaymentByOrder(orderId, TenantContext.getTenantId());
+    public Payment getPaymentByOrder(@PathVariable Long orderId, HttpServletRequest request) {
+        return paymentService.getPaymentByOrder(
+                orderId, TenantContext.getTenantId(),
+                authenticatedUserId(request), authenticatedRole(request)
+        );
+    }
+
+    private Long authenticatedUserId(HttpServletRequest request) {
+        String token = bearerToken(request);
+        return jwtUtil.extractUserId(token);
+    }
+
+    private String authenticatedRole(HttpServletRequest request) {
+        return jwtUtil.extractRole(bearerToken(request));
+    }
+
+    private String bearerToken(HttpServletRequest request) {
+        String authorization = request.getHeader("Authorization");
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Bearer token is required");
+        }
+        return authorization.substring(7);
     }
 }
