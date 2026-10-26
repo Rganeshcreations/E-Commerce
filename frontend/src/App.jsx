@@ -506,6 +506,7 @@ function CustomerDashboard() {
   const customerName = formatDisplayName(email);
 
   const [products, setProducts] = useState([]);
+  const [customerOrders, setCustomerOrders] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
 
@@ -513,7 +514,7 @@ function CustomerDashboard() {
     let active = true;
     async function loadRecommendations() {
       try {
-        const [catalog, vendors] = await Promise.all([api.products(), api.vendors()]);
+        const [catalog, vendors, orders] = await Promise.all([api.products(), api.vendors(), api.orders()]);
         const vendorNames = new Map(
           (Array.isArray(vendors) ? vendors : []).map(vendor => [
             Number(vendor.id),
@@ -532,7 +533,10 @@ function CustomerDashboard() {
             stock: Number(product.stockQuantity ?? product.stock ?? 0),
             image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
           }));
-        if (active) setProducts(items);
+        if (active) {
+          setProducts(items);
+          setCustomerOrders(Array.isArray(orders) ? orders : []);
+        }
       } catch (error) {
         if (active) setCatalogError(error.message || "Could not load recommended products.");
       } finally {
@@ -618,10 +622,10 @@ function CustomerDashboard() {
       >
 
         {[
-          [Package, "Orders", "0", "View your purchases"],
+          [Package, "Orders", catalogLoading ? "—" : customerOrders.length, "View your purchases"],
           [ShoppingCart, "Cart Items", cartCount, "Items waiting for checkout"],
-          [Eye, "Wishlist", "0", "Saved products"],
-          [Truck, "Saved Addresses", "0", "Manage delivery addresses"]
+          [Eye, "Wishlist", "Coming soon", "Wishlist module not connected"],
+          [Truck, "Saved Addresses", "Coming soon", "Address book module not connected"]
         ].map(([Icon, label, value, note]) => (
 
           <div
@@ -2973,8 +2977,7 @@ function GenericPage({ title, description }) {
       <div className="empty-card">
         <BarChart3 size={44}/>
         <h2>{title}</h2>
-        <p>This module is connected to the MarketGrid interface and is ready for backend API integration.</p>
-        <div className="action-row"><button className="primary-btn"><Plus size={17}/> Create New</button><button className="secondary-btn">Refresh Data</button></div>
+        <p>This module is a placeholder. Its backend API and save actions have not been implemented yet.</p>
       </div>
     </div>
   );
