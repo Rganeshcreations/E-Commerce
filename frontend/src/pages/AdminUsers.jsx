@@ -5,8 +5,6 @@ import {
   ShieldCheck, Store, User, Mail, Lock, Phone, Building2
 } from "lucide-react";
 
-const API = "http://localhost:8080";
-
 function roleClass(role) {
   if (role === "SUPER_ADMIN") return "blue";
   if (role === "TENANT_ADMIN") return "purple";
@@ -16,6 +14,7 @@ function roleClass(role) {
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -26,8 +25,11 @@ export default function AdminUsers() {
     setLoadingUsers(true);
     setMessage("");
     try {
-      const data = await api.users();
+      const [data, tenantData] = await Promise.all([api.users(), api.tenants()]);
       const rows = Array.isArray(data) ? data : [];
+      const activeTenants = (Array.isArray(tenantData) ? tenantData : [])
+        .filter(tenant => tenant.active);
+      setTenants(activeTenants);
       setUsers(rows.map(user => ({
         id: user.id,
         fullName: user.fullName,
@@ -36,6 +38,12 @@ export default function AdminUsers() {
         tenantId: user.tenantId,
         status: user.active ? "ACTIVE" : "INACTIVE"
       })));
+      setForm(previous => ({
+        ...previous,
+        tenantId: activeTenants.some(tenant => String(tenant.id) === String(previous.tenantId))
+          ? String(previous.tenantId)
+          : String(activeTenants[0]?.id || "")
+      }));
     } catch (error) {
       setMessage(error.message || "Unable to load users from the server.");
     } finally {
@@ -55,7 +63,7 @@ export default function AdminUsers() {
     phone: "",
     businessName: "",
     role: "CUSTOMER",
-    tenantId: "1"
+    tenantId: ""
   });
 
   const filteredUsers = useMemo(() => {
@@ -79,6 +87,10 @@ export default function AdminUsers() {
 
   function openAdd(role) {
     setMessage("");
+    if (tenants.length === 0) {
+      setMessage("No active tenants are available. Activate a tenant before creating accounts.");
+      return;
+    }
 
     setForm({
       fullName: "",
@@ -87,7 +99,7 @@ export default function AdminUsers() {
       phone: "",
       businessName: "",
       role,
-      tenantId: "1"
+      tenantId: String(tenants[0].id)
     });
 
     setShowModal(true);
@@ -494,16 +506,20 @@ export default function AdminUsers() {
               </label>
 
               <label>
-                Tenant ID
+                Active Tenant
 
-                <input
-                  type="number"
+                <select
                   name="tenantId"
                   value={form.tenantId}
                   onChange={updateField}
-                  min="1"
                   required
-                />
+                >
+                  {tenants.map(tenant => (
+                    <option key={tenant.id} value={tenant.id}>
+                      {tenant.name || tenant.slug} (#{tenant.id}) — {tenant.slug}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               {form.role === "VENDOR" && (
