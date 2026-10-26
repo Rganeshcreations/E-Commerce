@@ -1291,3 +1291,21 @@
 @media (max-width: 420px) {
   .login-role-switch button { font-size: 10px; padding-inline: 2px; }
 }
+
+
+.register-role-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+  stroke-width: 1.9;
+}
+.auth-inline-error {
+  display: block;
+  margin-top: 6px;
+  color: #b42318 !important;
+  overflow-wrap: anywhere;
+}
+.register-role-switch button:focus-visible,
+.login-role-switch button:focus-visible {
+  outline: 3px solid #93b4ff;
+  outline-offset: 2px;
+}
