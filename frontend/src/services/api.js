@@ -77,8 +77,11 @@ export const api = {
       body: JSON.stringify(body)
     }),
 
-  // Public registration options and applications
+  // Business domains: public read, SUPER_ADMIN-only create enforced by backend
   domains: () => request("/api/domains"),
+  createDomain: (body) => request("/api/domains", {
+    method: "POST", body: JSON.stringify(body)
+  }),
   publicTenants: () => request("/api/public/tenants"),
   submitTenantApplication: (body) =>
     request("/api/tenant-applications", { method: "POST", body: JSON.stringify(body) }),
