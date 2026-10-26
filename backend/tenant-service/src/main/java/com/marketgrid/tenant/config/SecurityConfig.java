@@ -35,15 +35,17 @@ public class SecurityConfig {
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/api/tenants/slug/**").permitAll()
 
-                // Public access only to application submission.
-                .requestMatchers(HttpMethod.POST, "/api/tenant-applications").permitAll()
+                // Domain names and availability are shown on public signup forms.
+                .requestMatchers(HttpMethod.GET, "/api/domains").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/domains").hasRole("SUPER_ADMIN")
+                .requestMatchers("/api/domains/**").hasRole("SUPER_ADMIN")
 
-                // All other application endpoints require SUPER_ADMIN.
+                // Public tenant applications will be submitted for Super Admin review.
+                .requestMatchers(HttpMethod.POST, "/api/tenant-applications").permitAll()
                 .requestMatchers("/api/tenant-applications/**").hasRole("SUPER_ADMIN")
 
-                // Existing tenant management protection.
+                // Tenant creation and activation remain restricted to Super Admin.
                 .requestMatchers("/api/tenants", "/api/tenants/**").hasRole("SUPER_ADMIN")
-
                 .anyRequest().denyAll()
             )
             .addFilterBefore(
