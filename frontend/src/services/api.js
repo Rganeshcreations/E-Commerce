@@ -60,6 +60,8 @@ export const api = {
       body: JSON.stringify(body)
     }),
 
+  deleteUser: (id) => request(`/api/users/${id}`, { method: "DELETE" }),
+
   createVendor: (body) =>
     request("/api/vendors", {
       method: "POST",
@@ -95,6 +97,7 @@ export const api = {
 
   // Vendors
   vendors: () => request("/api/vendors"),
+  myVendor: () => request("/api/vendors/me"),
 
   // Payments
   createPayment: (body) =>
