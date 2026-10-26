@@ -186,54 +186,69 @@ export default function AdminManagement({type="tenants"}){
 }
 
 function AdminOrders(){
-  const orders=[
-    [8,10,"Tech Store","PLACED",65000],
-    [7,10,"Tech Store","PLACED",65000],
-    [6,10,"Tech Store + Gear Hub","PLACED",67500],
-    [5,1,"Tech Store","CONFIRMED",65000],
-    [4,1,"Tech Store + Gear Hub","PLACED",67500],
-    [3,1,"Tech Store + Gear Hub","PLACED",67500]
-  ];
+  const [orders,setOrders]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [refresh,setRefresh]=useState(0);
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);
+      setError("");
+      try{
+        const data=await api.orders();
+        if(active)setOrders(Array.isArray(data)?data:[]);
+      }catch(e){
+        if(active){setOrders([]);setError(e.message||"Unable to load orders.");}
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    load();
+    return ()=>{active=false;};
+  },[refresh]);
+
+  const totalValue=orders.reduce((sum,o)=>sum+Number(o.totalAmount||0),0);
+  const pending=orders.filter(o=>["PLACED","PENDING","CONFIRMED"].includes(String(o.status||"").toUpperCase())).length;
+  const completed=orders.filter(o=>String(o.status||"").toUpperCase()==="DELIVERED").length;
+  const recent=[...orders].sort((a,b)=>Number(b.id)-Number(a.id));
 
   return(
     <div style={page}>
-      <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Monitor marketplace orders across all tenants and vendors."/>
-
+      <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Monitor orders visible to your platform administrator account."/>
+      {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
       <div style={statsGrid}>
-        <Stat icon={<Truck size={21}/>} title="Total Orders" value="12,480"/>
-        <Stat icon={<Clock3 size={21}/>} title="Pending" value="284"/>
-        <Stat icon={<CheckCircle2 size={21}/>} title="Completed" value="11,920"/>
-        <Stat icon={<IndianRupee size={21}/>} title="Order Value" value="₹8.4Cr"/>
+        <Stat icon={<Truck size={21}/>} title="Total Orders" value={loading?"—":orders.length}/>
+        <Stat icon={<Clock3 size={21}/>} title="Pending" value={loading?"—":pending}/>
+        <Stat icon={<CheckCircle2 size={21}/>} title="Delivered" value={loading?"—":completed}/>
+        <Stat icon={<IndianRupee size={21}/>} title="Order Value" value={loading?"—":"₹"+totalValue.toLocaleString("en-IN")}/>
       </div>
-
       <div style={toolbar}>
-        <div style={searchBox}>
-          <Search size={18}/>
-          <input placeholder="Search orders, customers or vendors..."/>
-        </div>
-        <button style={secondary}><RefreshCw size={16}/> Refresh</button>
+        <span style={{color:"#75839a"}}>{loading?"Loading orders...":orders.length+" orders returned by the API"}</span>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}><RefreshCw size={16}/> Refresh</button>
       </div>
-
       <div style={tableCard}>
-        <div style={tableHead}>
-          <div><h2>Marketplace Orders</h2><p>Latest platform orders</p></div>
+        <div style={tableHead}><div><h2>Marketplace Orders</h2><p>Live order records</p></div></div>
+        <div style={{overflowX:"auto"}}>
+          <table style={table}>
+            <thead><tr><th>ORDER</th><th>CUSTOMER</th><th>VENDOR(S)</th><th>STATUS</th><th>TOTAL</th></tr></thead>
+            <tbody>
+              {loading&&<tr><td colSpan="5" style={{padding:28,textAlign:"center"}}>Loading orders...</td></tr>}
+              {!loading&&recent.map(order=>{
+                const vendors=[...new Set((order.items||[]).map(item=>item.vendorId).filter(id=>id!=null))];
+                return <tr key={order.id}>
+                  <td><strong>{"Order #"+order.id}</strong></td>
+                  <td>{"Customer #"+order.customerId}</td>
+                  <td>{vendors.length?vendors.map(id=>"Vendor #"+id).join(", "):"—"}</td>
+                  <td><Status status={order.status||"UNKNOWN"}/></td>
+                  <td><strong>{"₹"+Number(order.totalAmount||0).toLocaleString("en-IN")}</strong></td>
+                </tr>;
+              })}
+              {!loading&&!error&&orders.length===0&&<tr><td colSpan="5" style={{padding:28,textAlign:"center"}}>No orders returned by the API.</td></tr>}
+            </tbody>
+          </table>
         </div>
-
-        <table style={table}>
-          <thead><tr><th>ORDER</th><th>CUSTOMER</th><th>VENDOR</th><th>STATUS</th><th>TOTAL</th><th></th></tr></thead>
-          <tbody>
-            {orders.map(o=>(
-              <tr key={o[0]}>
-                <td><strong>Order #{o[0]}</strong></td>
-                <td>Customer #{o[1]}</td>
-                <td>{o[2]}</td>
-                <td><Status status={o[3]}/></td>
-                <td><strong>₹{o[4].toLocaleString("en-IN")}</strong></td>
-                <td><button style={more}><ArrowUpRight size={17}/></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
