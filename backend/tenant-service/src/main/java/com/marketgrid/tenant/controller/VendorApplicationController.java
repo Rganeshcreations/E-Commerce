@@ -6,6 +6,7 @@ import com.marketgrid.tenant.repository.TenantRepository;
 import com.marketgrid.tenant.repository.VendorApplicationRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,10 +18,13 @@ import java.util.Map;
 public class VendorApplicationController {
     private final VendorApplicationRepository applications;
     private final TenantRepository tenants;
+    private final PasswordEncoder passwordEncoder;
 
-    public VendorApplicationController(VendorApplicationRepository applications, TenantRepository tenants) {
+    public VendorApplicationController(VendorApplicationRepository applications, TenantRepository tenants,
+            PasswordEncoder passwordEncoder) {
         this.applications = applications;
         this.tenants = tenants;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping
@@ -43,6 +47,7 @@ public class VendorApplicationController {
         application.setApplicantEmail(email);
         application.setTenantSlug(slug);
         application.setBusinessName(request.getBusinessName().trim());
+        application.setApplicantPasswordHash(passwordEncoder.encode(request.getPassword()));
         application.setStatus(VendorApplication.Status.PENDING);
         VendorApplication saved = applications.save(application);
         return Map.of("id", saved.getId(), "status", saved.getStatus().name(),
