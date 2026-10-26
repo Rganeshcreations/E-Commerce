@@ -17,13 +17,14 @@ export default function VendorDashboard(){
       setLoading(true);
       setError("");
 
-      const [p,o]=await Promise.all([
-        api.products(),
+      const vendor = await api.myVendor();
+      const [p, o] = await Promise.all([
+        api.productsByVendor(vendor.id),
         api.orders()
       ]);
 
-      setProducts(p||[]);
-      setOrders(o||[]);
+      setProducts(Array.isArray(p) ? p : []);
+      setOrders(Array.isArray(o) ? o : []);
     }catch(e){
       setError(e.message);
     }finally{
