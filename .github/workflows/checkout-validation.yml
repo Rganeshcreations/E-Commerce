@@ -80,6 +80,22 @@ jobs:
       - name: Test User Service
         run: mvn -B -f backend/user-service/pom.xml test
 
+  tenant-service-tests:
+    name: Test Tenant Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/tenant-service/pom.xml
+      - name: Test Tenant Service
+        run: mvn -B -f backend/tenant-service/pom.xml test
+
   vendor-service-tests:
     name: Test Vendor Service
     runs-on: ubuntu-latest
