@@ -100,8 +100,9 @@ public class AuthService {
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.UNAUTHORIZED, "Invalid email, password or store"));
         } else {
+            // Login without a store slug: email identifies the account.
+            // The JWT still carries tenantId, so tenant-scoped authorization remains in force.
             user = userRepository.findByEmail(email)
-                    .filter(u -> "SUPER_ADMIN".equals(u.getRole()))
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.UNAUTHORIZED, "Invalid email or password"));
         }
