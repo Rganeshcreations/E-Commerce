@@ -259,7 +259,6 @@ function Login() {
   const [accountType, setAccountType] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -269,12 +268,6 @@ function Login() {
     setLoading(true);
     try {
       const payload = { email: email.trim().toLowerCase(), password };
-      if (accountType !== "SUPER_ADMIN") {
-        if (!tenantSlug.trim()) {
-          throw new Error("Enter your store slug for this account.");
-        }
-        payload.tenantSlug = tenantSlug.trim();
-      }
       const data = await api.login(payload);
       if (!data?.token || !data?.role) {
         throw new Error("Login response is missing the token or account role.");
@@ -337,12 +330,6 @@ function Login() {
               onChange={event => setEmail(event.target.value)}
               placeholder="you@example.com" required />
           </label>
-          {accountType !== "SUPER_ADMIN" && <label>
-            Store Slug
-            <input type="text" value={tenantSlug}
-              onChange={event => setTenantSlug(event.target.value)}
-              placeholder="Enter your store slug" required />
-          </label>}
           <label>
             Password
             <input type="password" autoComplete="current-password" value={password}
