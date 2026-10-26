@@ -1309,3 +1309,21 @@
   outline: 3px solid #93b4ff;
   outline-offset: 2px;
 }
+
+
+.auth-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 7px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-text-button:hover { color: #1d4ed8; text-decoration: underline; }
+.auth-text-button:disabled { color: #94a3b8; cursor: wait; }
