@@ -36,10 +36,16 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-
-                        .requestMatchers("/api/vendors/**")
-                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN", "VENDOR")
-
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vendors/me")
+                        .hasRole("VENDOR")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vendors/**")
+                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN", "VENDOR", "CUSTOMER")
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/vendors/**")
+                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
+                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/vendors/**")
+                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
+                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/vendors/**")
+                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
                         .anyRequest().authenticated()
                 )
 
