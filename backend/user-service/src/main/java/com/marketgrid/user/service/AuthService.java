@@ -61,23 +61,31 @@ public class AuthService {
         if (password == null || password.length() < 8 || password.length() > 72) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain 8 to 72 characters");
         }
-        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Store slug is required");
-        }
-
-        TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
-
-        if (userRepository.findByEmailAndTenantId(email, tenant.getId()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists in this store");
-        }
-
         User user = new User();
-        user.setTenantId(tenant.getId());
         user.setFullName(fullName);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole("CUSTOMER");
         user.setActive(true);
+
+        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()) {
+            // A standalone account can apply for a store before any tenant exists.
+            // It receives no tenant privileges until Super Admin approval.
+            if (userRepository.findByEmail(email).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An account with this email already exists");
+            }
+            user.setTenantId(null);
+            user.setRole("TENANT_APPLICANT");
+        } else {
+            TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
+            if (userRepository.findByEmailAndTenantId(email, tenant.getId()).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An account with this email already exists in this store");
+            }
+            user.setTenantId(tenant.getId());
+            user.setRole("CUSTOMER");
+        }
+
         return userRepository.save(user);
     }
 
