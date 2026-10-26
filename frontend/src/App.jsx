@@ -1694,6 +1694,11 @@ function Checkout() {
         order = await api.order(storedPending.orderId);
       } else {
         order = await api.createOrder({
+          deliveryName: form.fullName.trim(),
+          deliveryPhone: form.phone.trim(),
+          deliveryAddress: form.address.trim(),
+          deliveryCity: form.city.trim(),
+          deliveryPincode: form.pincode.trim(),
           items: cart.map(item => ({
             productId: Number(item.id),
             vendorId: Number(item.vendorId),
