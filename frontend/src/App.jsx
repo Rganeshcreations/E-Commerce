@@ -367,15 +367,32 @@ function Login() {
 
 function Register() {
   const navigate = useNavigate();
+  const [accountType, setAccountType] = useState("CUSTOMER");
   const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    tenantSlug: ""
+    fullName: "", email: "", password: "", tenantSlug: "",
+    storeName: "", requestedSlug: "", domainSlug: "", businessName: ""
   });
+  const [domains, setDomains] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([api.domains(), api.publicTenants()])
+      .then(([domainData, tenantData]) => {
+        if (!active) return;
+        setDomains(Array.isArray(domainData) ? domainData : []);
+        setTenants(Array.isArray(tenantData) ? tenantData : []);
+      })
+      .catch(err => {
+        if (active) setError(err.message || "Could not load stores and business domains.");
+      })
+      .finally(() => { if (active) setLoadingOptions(false); });
+    return () => { active = false; };
+  }, []);
 
   function updateField(event) {
     setForm(previous => ({ ...previous, [event.target.name]: event.target.value }));
@@ -385,36 +402,57 @@ function Register() {
     event.preventDefault();
     setMessage("");
     setError("");
-
     if (form.fullName.trim().length < 2) {
-      setError("Enter your full name (at least 2 characters).");
-      return;
+      setError("Enter your full name (at least 2 characters)."); return;
     }
-    if (form.password.length < 8) {
-      setError("Password must contain at least 8 characters.");
-      return;
+    if (accountType === "CUSTOMER" && form.password.length < 8) {
+      setError("Password must contain at least 8 characters."); return;
     }
-    if (!form.tenantSlug.trim()) {
-      setError("Enter the store slug where you want to register.");
-      return;
+    if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.requestedSlug.trim() || !form.domainSlug)) {
+      setError("Enter the store name, requested store slug, and business domain."); return;
+    }
+    if (accountType === "VENDOR" && (!form.tenantSlug || !form.businessName.trim())) {
+      setError("Select the store you want to join and enter your business name."); return;
     }
 
     setLoading(true);
     try {
-      await api.register({
-        fullName: form.fullName.trim(),
-        email: form.email.trim().toLowerCase(),
-        password: form.password,
-        tenantSlug: form.tenantSlug.trim()
-      });
-      setMessage("Registration successful. You can now sign in.");
-      window.setTimeout(() => navigate("/login", { replace: true }), 900);
+      if (accountType === "CUSTOMER") {
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+          tenantSlug: form.tenantSlug.trim()
+        });
+        setMessage("Customer account created. You can now sign in.");
+        window.setTimeout(() => navigate("/login", { replace: true }), 900);
+      } else if (accountType === "TENANT_ADMIN") {
+        await api.submitTenantApplication({
+          applicantName: form.fullName.trim(),
+          applicantEmail: form.email.trim().toLowerCase(),
+          storeName: form.storeName.trim(),
+          requestedSlug: form.requestedSlug.trim().toLowerCase(),
+          requestedDomainSlug: form.domainSlug
+        });
+        setMessage("Store application submitted. A Super Admin must review it before the store is activated.");
+      } else {
+        await api.submitVendorApplication({
+          applicantName: form.fullName.trim(),
+          applicantEmail: form.email.trim().toLowerCase(),
+          tenantSlug: form.tenantSlug,
+          businessName: form.businessName.trim()
+        });
+        setMessage("Vendor application submitted. Your selected store administrator must review your request.");
+      }
     } catch (err) {
-      setError(err.message || "Registration failed. Please check your details.");
+      setError(err.message || "Registration could not be completed. Please check your details.");
     } finally {
       setLoading(false);
     }
   }
+
+  const availableDomains = domains.filter(domain => domain.available);
+  const activeTenants = tenants.filter(tenant => tenant.active);
 
   return (
     <div className="auth-page">
@@ -425,70 +463,98 @@ function Register() {
         </div>
 
         <h1>Create your account</h1>
-        <p className="muted">Register as a customer in an active MarketGrid store.</p>
+        <p className="muted">Choose how you want to join MarketGrid.</p>
 
         <form onSubmit={submit} className="auth-form">
           <label>
+            Account Type
+            <select value={accountType} onChange={event => {
+              setAccountType(event.target.value); setError(""); setMessage("");
+            }}>
+              <option value="CUSTOMER">Customer — shop in a store</option>
+              <option value="VENDOR">Vendor — apply to sell in a store</option>
+              <option value="TENANT_ADMIN">Store Owner — apply to create a store</option>
+            </select>
+          </label>
+
+          <label>
             Full Name
-            <input
-              name="fullName"
-              value={form.fullName}
-              onChange={updateField}
-              autoComplete="name"
-              placeholder="Enter your full name"
-              minLength="2"
-              required
-            />
+            <input name="fullName" value={form.fullName} onChange={updateField}
+              autoComplete="name" placeholder="Enter your full name" minLength="2" required />
           </label>
 
           <label>
             Email
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={updateField}
-              autoComplete="email"
-              placeholder="you@example.com"
-              required
-            />
+            <input type="email" name="email" value={form.email} onChange={updateField}
+              autoComplete="email" placeholder="you@example.com" required />
           </label>
 
-          <label>
-            Store Slug
-            <input
-              name="tenantSlug"
-              value={form.tenantSlug}
-              onChange={updateField}
-              placeholder="e.g. marketgrid-demo"
-              required
-            />
-          </label>
+          {accountType === "CUSTOMER" && <>
+            <label>
+              Store
+              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading stores..." : "Select a store"}</option>
+                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>)}
+              </select>
+            </label>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+          </>}
 
-          <label>
-            Password
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={updateField}
-              autoComplete="new-password"
-              placeholder="At least 8 characters"
-              minLength="8"
-              required
-            />
-          </label>
+          {accountType === "VENDOR" && <>
+            <label>
+              Store you want to join
+              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading stores..." : "Select an active store"}</option>
+                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name}</option>)}
+              </select>
+            </label>
+            <label>
+              Business Name
+              <input name="businessName" value={form.businessName} onChange={updateField}
+                placeholder="Your shop or business name" required />
+            </label>
+            <p className="muted">Vendor access is not created immediately. The store administrator must review your application.</p>
+          </>}
+
+          {accountType === "TENANT_ADMIN" && <>
+            <label>
+              Store Name
+              <input name="storeName" value={form.storeName} onChange={updateField}
+                placeholder="Name of your store" required />
+            </label>
+            <label>
+              Requested Store Slug
+              <input name="requestedSlug" value={form.requestedSlug} onChange={updateField}
+                placeholder="e.g. my-market-store" pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*" required />
+              <small>Use letters and numbers, separated by single hyphens.</small>
+            </label>
+            <label>
+              Business Domain
+              <select name="domainSlug" value={form.domainSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading domains..." : "Select an available domain"}</option>
+                {availableDomains.map(domain => <option key={domain.id} value={domain.slug}>{domain.name}</option>)}
+              </select>
+              {!loadingOptions && availableDomains.length === 0 &&
+                <small>No available domains are configured yet. Please contact the platform administrator.</small>}
+            </label>
+            <p className="muted">Your store will be created only after Super Admin approval.</p>
+          </>}
 
           {error && <div className="error-box" role="alert">{error}</div>}
           {message && <div className="info-box" role="status">{message}</div>}
 
-          <button className="primary-btn full" type="submit" disabled={loading}>
-            {loading ? "Creating account..." : "Create Customer Account"}
+          <button className="primary-btn full" type="submit" disabled={loading || loadingOptions}>
+            {loading ? "Submitting..." : accountType === "CUSTOMER" ? "Create Customer Account" :
+              accountType === "VENDOR" ? "Submit Vendor Application" : "Submit Store Application"}
           </button>
         </form>
 
         <p className="auth-footer">
-          Need a vendor account? Contact your store administrator for approved vendor onboarding.
+          Platform Super Admin accounts are provisioned securely and cannot be created through public registration.
         </p>
         <p className="auth-footer">Already registered? <Link to="/login">Sign in</Link></p>
       </div>
