@@ -348,38 +348,33 @@ function AdminAnalytics(){
 }
 
 function AdminSettings(){
-  const [saved,setSaved]=useState(false);
-
   return(
     <div style={page}>
-      <Header eyebrow="PLATFORM CONFIGURATION" title="Settings" desc="Configure MarketGrid platform preferences and security."/>
+      <Header eyebrow="PLATFORM CONFIGURATION" title="Settings" desc="Review the current MarketGrid configuration."/>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px"}}>
         <div style={settingsCard}>
           <Settings size={24} color="#2864e6"/>
           <h2>Platform Settings</h2>
-          <p>General marketplace configuration.</p>
-
-          <label>Platform Name<input defaultValue="MarketGrid"/></label>
-          <label>Support Email<input defaultValue="support@marketgrid.com"/></label>
-          <label>Currency<input defaultValue="INR (₹)"/></label>
+          <p>These values are display-only until a settings API is implemented.</p>
+          <label>Platform Name<input defaultValue="MarketGrid" readOnly/></label>
+          <label>Support Email<input defaultValue="support@marketgrid.com" readOnly/></label>
+          <label>Currency<input defaultValue="INR (₹)" readOnly/></label>
         </div>
-
         <div style={settingsCard}>
           <ShieldCheck size={24} color="#2864e6"/>
-          <h2>Security</h2>
-          <p>Authentication and access configuration.</p>
-
+          <h2>Security Configuration</h2>
+          <p>Expected controls enforced by backend services.</p>
           <Toggle text="JWT Authentication" checked/>
           <Toggle text="Role Based Authorization" checked/>
           <Toggle text="Tenant Isolation" checked/>
           <Toggle text="Secure API Gateway" checked/>
+          <p style={{color:"#75839a",fontSize:12,marginTop:14}}>This screen does not perform a live security health check.</p>
         </div>
       </div>
-
-      <button style={{...primary,marginTop:"20px"}} onClick={()=>setSaved(true)}>
-        {saved?<><CheckCircle2 size={17}/> Settings Saved</>:<>Save Changes</>}
-      </button>
+      <div role="status" style={{...tableCard,padding:14,marginTop:20,color:"#75839a"}}>
+        No platform settings update endpoint exists yet. Changes are not saved by this screen.
+      </div>
     </div>
   );
 }
