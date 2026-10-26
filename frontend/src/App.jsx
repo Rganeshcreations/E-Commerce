@@ -256,6 +256,7 @@ function PageHead({ eyebrow, title, description, action }) {
 
 function Login() {
   const navigate = useNavigate();
+  const [accountType, setAccountType] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
@@ -266,29 +267,26 @@ function Login() {
     event.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-      const payload = {
-        email: email.trim().toLowerCase(),
-        password
-      };
-      if (tenantSlug.trim()) payload.tenantSlug = tenantSlug.trim();
-
+      const payload = { email: email.trim().toLowerCase(), password };
+      if (accountType !== "SUPER_ADMIN") {
+        if (!tenantSlug.trim()) {
+          throw new Error("Enter your store slug for this account.");
+        }
+        payload.tenantSlug = tenantSlug.trim();
+      }
       const data = await api.login(payload);
       if (!data?.token || !data?.role) {
         throw new Error("Login response is missing the token or account role.");
       }
-
-      const homes = {
-        SUPER_ADMIN: "/admin",
-        TENANT_ADMIN: "/tenant",
-        VENDOR: "/vendor",
-        CUSTOMER: "/shop"
-      };
-      if (!homes[data.role]) {
-        throw new Error("This account has an unsupported role. Contact your administrator.");
+      if (data.role !== accountType) {
+        throw new Error("This account does not match the selected account type.");
       }
-
+      const homes = {
+        SUPER_ADMIN: "/admin", TENANT_ADMIN: "/tenant",
+        VENDOR: "/vendor", CUSTOMER: "/shop"
+      };
+      if (!homes[data.role]) throw new Error("Unsupported account role. Contact your administrator.");
       localStorage.setItem("marketgrid_token", data.token);
       localStorage.setItem("marketgrid_role", data.role);
       localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
@@ -310,55 +308,54 @@ function Login() {
           <div className="brand-mark">M</div>
           <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
         </div>
-
         <h1>Welcome back</h1>
         <p className="muted">Sign in to continue to your workspace.</p>
+
+        <div className="login-role-switch" role="group" aria-label="Choose account type">
+          <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+            onClick={() => { setAccountType("CUSTOMER"); setError(""); }}>
+            <span className="login-role-icon">♙</span><span>Customer</span>
+          </button>
+          <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+            onClick={() => { setAccountType("VENDOR"); setError(""); }}>
+            <span className="login-role-icon">▣</span><span>Vendor</span>
+          </button>
+          <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">⬡</span><span>Tenant Admin</span>
+          </button>
+          <button type="button" className={accountType === "SUPER_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("SUPER_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">♛</span><span>Super Admin</span>
+          </button>
+        </div>
 
         <form onSubmit={submit} className="auth-form">
           <label>
             Email
-            <input
-              type="email"
-              autoComplete="username"
-              value={email}
+            <input type="email" autoComplete="username" value={email}
               onChange={event => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              required
-            />
+              placeholder="you@example.com" required />
           </label>
-
-          <label>
+          {accountType !== "SUPER_ADMIN" && <label>
             Store Slug
-            <input
-              type="text"
-              value={tenantSlug}
+            <input type="text" value={tenantSlug}
               onChange={event => setTenantSlug(event.target.value)}
-              placeholder="Required for store accounts"
-            />
-            <small>Enter your store slug. Platform administrators can leave this blank.</small>
-          </label>
-
+              placeholder="Enter your store slug" required />
+          </label>}
           <label>
             Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
+            <input type="password" autoComplete="current-password" value={password}
               onChange={event => setPassword(event.target.value)}
-              placeholder="Enter your password"
-              required
-            />
+              placeholder="Enter your password" required />
           </label>
-
           {error && <div className="error-box" role="alert">{error}</div>}
-
           <button className="primary-btn full" type="submit" disabled={loading}>
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
-
         <p className="auth-footer">
-          New to MarketGrid? <Link to="/register">Create a customer account</Link>
+          New to MarketGrid? <Link to="/register">Create an account</Link>
         </p>
       </div>
     </div>
