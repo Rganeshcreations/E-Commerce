@@ -67,23 +67,6 @@ function formatDisplayName(email) {
     .join(" ");
 }
 
-const demoProducts = [
-  { id: 1, name: "Gaming Laptop", vendor: "Tech Store", price: 65000, stock: 10, status: "Available" },
-  { id: 2, name: "Mechanical Keyboard", vendor: "Gear Hub", price: 2500, stock: 25, status: "Available" },
-  { id: 3, name: "Wireless Mouse", vendor: "Tech Store", price: 1200, stock: 40, status: "Available" }
-];
-
-const demoVendors = [
-  { id: 1, name: "Tech Store", email: "vendor1@test.com", status: "ACTIVE", products: 2 },
-  { id: 2, name: "Gear Hub", email: "vendor2@test.com", status: "ACTIVE", products: 1 }
-];
-
-const demoOrders = [
-  { id: 101, customer: "Rahul", total: 67500, status: "PLACED", vendors: 2 },
-  { id: 102, customer: "Priya", total: 2500, status: "SHIPPED", vendors: 1 },
-  { id: 103, customer: "Arjun", total: 1200, status: "DELIVERED", vendors: 1 }
-];
-
 function useAuth() {
   const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
