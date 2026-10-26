@@ -16,6 +16,7 @@ import AdminUsers from "./pages/AdminUsers";
 import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
 import VendorOrders from "./pages/VendorOrders";
+import TenantApplicantDashboard from "./pages/TenantApplicantDashboard";
 
 function getStoredCart() {
   try {
@@ -90,6 +91,7 @@ function homeForRole(role) {
   return ({
     SUPER_ADMIN: "/admin",
     TENANT_ADMIN: "/tenant",
+    TENANT_APPLICANT: "/tenant-applicant",
     VENDOR: "/vendor",
     CUSTOMER: "/shop"
   })[role] || "/login";
@@ -277,7 +279,7 @@ function Login() {
       }
       const homes = {
         SUPER_ADMIN: "/admin", TENANT_ADMIN: "/tenant",
-        VENDOR: "/vendor", CUSTOMER: "/shop"
+        TENANT_APPLICANT: "/tenant-applicant", VENDOR: "/vendor", CUSTOMER: "/shop"
       };
       if (!homes[data.role]) throw new Error("Unsupported account role. Contact your administrator.");
       localStorage.setItem("marketgrid_token", data.token);
@@ -425,15 +427,36 @@ function Register() {
         setMessage("Customer account created. You can now sign in.");
         window.setTimeout(() => navigate("/login", { replace: true }), 900);
       } else if (accountType === "TENANT_ADMIN") {
-        await api.submitTenantApplication({
-          applicantName: form.fullName.trim(),
-          applicantEmail: form.email.trim().toLowerCase(),
-          storeName: form.storeName.trim(),
-          requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
-          requestedDomainSlug: form.domainSlug,
+        // Step 1: create a standalone account with no tenant privileges.
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
           password: form.password
         });
-        setMessage("Store application submitted. A Super Admin must review it before the store is activated.");
+        // Step 2: sign in with that same account before submitting the store application.
+        const session = await api.login({
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        });
+        localStorage.setItem("marketgrid_token", session.token);
+        localStorage.setItem("marketgrid_role", session.role);
+        localStorage.setItem("marketgrid_user_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_customer_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_tenant", String(session.tenantId ?? ""));
+        localStorage.setItem("marketgrid_email", session.email || form.email.trim().toLowerCase());
+        try {
+          await api.submitTenantApplication({
+            applicantName: form.fullName.trim(),
+            storeName: form.storeName.trim(),
+            requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+            requestedDomainSlug: form.domainSlug
+          });
+          navigate("/tenant-applicant", { replace: true });
+        } catch (applicationError) {
+          setError("Your account was created and signed in, but the application could not be submitted: " +
+            (applicationError.message || "Please submit it from your applicant dashboard."));
+          navigate("/tenant-applicant", { replace: true });
+        }
       } else {
         await api.submitVendorApplication({
           applicantName: form.fullName.trim(),
@@ -3088,6 +3111,7 @@ function RoleRedirect() {
   const { role } = useAuth();
   if (role === "SUPER_ADMIN") return <Navigate to="/admin" replace/>;
   if (role === "TENANT_ADMIN") return <Navigate to="/tenant" replace/>;
+  if (role === "TENANT_APPLICANT") return <Navigate to="/tenant-applicant" replace/>;
   if (role === "VENDOR") return <Navigate to="/vendor" replace/>;
   if (role === "CUSTOMER") return <Navigate to="/shop" replace/>;
   return <Navigate to="/login" replace/>;
