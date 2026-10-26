@@ -28,6 +28,7 @@ export default function VendorProducts() {
   const [products, setProducts] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -44,8 +45,9 @@ export default function VendorProducts() {
       setLoading(true);
       setError("");
 
-      const data = await api.products();
-      setProducts(data || []);
+      const vendor = await api.myVendor();
+      const data = await api.productsByVendor(vendor.id);
+      setProducts(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -102,49 +104,57 @@ export default function VendorProducts() {
     setShowModal(true);
   }
 
-  function saveProduct(e) {
-    e.preventDefault();
+  async function saveProduct(event) {
+    event.preventDefault();
+    setError("");
 
-    if (!form.productName.trim()) return;
-
-    if (editing) {
-      setProducts(prev =>
-        prev.map(p =>
-          p.id === editing.id
-            ? {
-                ...p,
-                productName: form.productName,
-                description: form.description,
-                price: Number(form.price || 0),
-                stockQuantity: Number(form.stockQuantity || 0)
-              }
-            : p
-        )
-      );
-    } else {
-      const newProduct = {
-        id: Date.now(),
-        productName: form.productName,
-        description: form.description,
-        price: Number(form.price || 0),
-        stockQuantity: Number(form.stockQuantity || 0),
-        status: "AVAILABLE"
-      };
-
-      setProducts(prev => [newProduct, ...prev]);
+    const price = Number(form.price);
+    const stockQuantity = Number(form.stockQuantity);
+    if (!form.productName.trim()) {
+      setError("Product name is required.");
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(stockQuantity) || stockQuantity < 0) {
+      setError("Enter a valid non-negative price and whole-number stock quantity.");
+      return;
     }
 
-    setShowModal(false);
+    const body = {
+      productName: form.productName.trim(),
+      description: form.description.trim(),
+      price,
+      stockQuantity,
+      status: editing?.status || "ACTIVE"
+    };
+
+    try {
+      setSaving(true);
+      if (editing) {
+        await api.updateProduct(editing.id, body);
+      } else {
+        const vendor = await api.myVendor();
+        await api.createProduct({ ...body, vendorId: vendor.id });
+      }
+      setShowModal(false);
+      await load();
+    } catch (error) {
+      setError(error.message || "Unable to save product.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function deleteProduct(id) {
-    const confirmed = window.confirm(
-      "Are you sure you want to remove this product?"
-    );
-
+  async function deleteProduct(id) {
+    const confirmed = window.confirm("Are you sure you want to remove this product?");
     if (!confirmed) return;
 
-    setProducts(prev => prev.filter(p => p.id !== id));
+    try {
+      setError("");
+      await api.deleteProduct(id);
+      await load();
+    } catch (error) {
+      setError(error.message || "Unable to delete product.");
+    }
   }
 
   return (
@@ -656,6 +666,7 @@ export default function VendorProducts() {
 
               <button
                 type="submit"
+                disabled={saving}
                 style={{
                   width: "100%",
                   border: "none",
@@ -673,7 +684,7 @@ export default function VendorProducts() {
                 }}
               >
                 <CheckCircle2 size={17} />
-                {editing ? "Save Changes" : "Create Product"}
+                {saving ? "Saving..." : editing ? "Save Changes" : "Create Product"}
               </button>
 
             </form>
