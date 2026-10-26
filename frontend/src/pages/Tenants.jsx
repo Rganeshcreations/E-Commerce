@@ -263,6 +263,7 @@ export default function Tenants() {
                     "Email",
                     "Store",
                     "Requested slug",
+                    "Business domain",
                     "Submitted",
                     "Actions"
                   ].map((heading) => (
@@ -280,6 +281,7 @@ export default function Tenants() {
                     <td style={styles.cell}>{application.applicantEmail}</td>
                     <td style={styles.cell}>{application.storeName}</td>
                     <td style={styles.cell}>{application.requestedSlug}</td>
+                    <td style={styles.cell}>{application.requestedDomainSlug || "—"}</td>
                     <td style={styles.cell}>
                       {application.submittedAt
                         ? new Date(application.submittedAt).toLocaleString()
