@@ -69,7 +69,7 @@ public class UserService {
         if (fullName.length() < 2 || fullName.length() > 120) {
             throw badRequest("Full name must be between 2 and 120 characters");
         }
-        if (!email.matches("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$")) {
+        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             throw badRequest("Enter a valid email address");
         }
         if (rawPassword == null || rawPassword.length() < 8 || rawPassword.length() > 72) {
