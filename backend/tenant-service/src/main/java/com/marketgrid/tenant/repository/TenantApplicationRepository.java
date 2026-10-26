@@ -11,6 +11,8 @@ public interface TenantApplicationRepository
     List<TenantApplication> findByStatusOrderBySubmittedAtDesc(
             TenantApplication.Status status);
 
+    List<TenantApplication> findByApplicantUserIdOrderBySubmittedAtDesc(Long applicantUserId);
+
     boolean existsByRequestedSlugAndStatus(
             String requestedSlug,
             TenantApplication.Status status);
