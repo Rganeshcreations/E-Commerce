@@ -1,178 +1,215 @@
-import React,{useMemo,useState} from "react";
+import React,{useEffect,useMemo,useState} from "react";
 import {Link} from "react-router-dom";
 import {
-  Package,Users,Boxes,Truck,Settings,Search,Plus,RefreshCw,
-  IndianRupee,AlertTriangle,CheckCircle2,Clock3,ArrowUpRight,
-  Edit3,Trash2,Store,BarChart3,Save
+  Package,Boxes,Truck,Settings,Search,Plus,RefreshCw,
+  IndianRupee,AlertTriangle,CheckCircle2,Clock3,Trash2,Store,Save
 } from "lucide-react";
-
-const products=[
-  {id:1,name:"Gaming Laptop",vendor:"Tech Store",price:65000,stock:4,status:"ACTIVE"},
-  {id:2,name:"iPhone Flip",vendor:"Tech Store",price:0,stock:0,status:"ACTIVE"},
-  {id:3,name:"Mechanical Keyboard",vendor:"Gear Hub",price:2500,stock:19,status:"ACTIVE"},
-  {id:4,name:"Wireless Mouse",vendor:"Tech Store",price:1200,stock:40,status:"ACTIVE"},
-  {id:5,name:"Gaming Monitor",vendor:"Gear Hub",price:18000,stock:12,status:"ACTIVE"}
-];
-
-const vendors=[
-  {id:1,name:"Krishna",email:"krishna@gmail.com",business:"Tech Store",products:2,orders:8,status:"ACTIVE"},
-  {id:2,name:"Ravi Kumar",email:"ravi@gearhub.com",business:"Gear Hub",products:14,orders:21,status:"ACTIVE"},
-  {id:3,name:"Suresh",email:"suresh@smartworld.com",business:"Smart World",products:9,orders:17,status:"ACTIVE"}
-];
-
-const orders=[
-  {id:8,customer:10,vendor:"Tech Store",status:"PLACED",total:65000},
-  {id:7,customer:10,vendor:"Tech Store",status:"PLACED",total:65000},
-  {id:6,customer:10,vendor:"Tech Store + Gear Hub",status:"PLACED",total:67500},
-  {id:5,customer:1,vendor:"Tech Store",status:"CONFIRMED",total:65000},
-  {id:4,customer:1,vendor:"Tech Store + Gear Hub",status:"PLACED",total:67500}
-];
+import {api} from "../services/api";
 
 export default function TenantManagement({type="products"}){
-  if(type==="vendors")return <TenantVendors/>;
   if(type==="inventory")return <TenantInventory/>;
   if(type==="orders")return <TenantOrders/>;
   if(type==="settings")return <TenantSettings/>;
-
-  const [search,setSearch]=useState("");
-  const [showAdd,setShowAdd]=useState(false);
-  const [items,setItems]=useState(products);
-
-  const filtered=items.filter(p=>
-    `${p.name} ${p.vendor}`.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const stock=items.reduce((s,p)=>s+Number(p.stock),0);
-  const low=items.filter(p=>p.stock<=5).length;
-
-  return <Page>
-    <Header
-      eyebrow="PRODUCT MANAGEMENT"
-      title="Products"
-      desc="Manage products belonging to your tenant."
-      action={<button style={primary} onClick={()=>setShowAdd(true)}><Plus size={17}/> Add Product</button>}
-    />
-
-    <div style={stats}>
-      <Stat icon={<Package/>} title="Total Products" value={items.length} note="Tenant catalogue"/>
-      <Stat icon={<Boxes/>} title="Total Stock" value={stock} note="Units available"/>
-      <Stat icon={<AlertTriangle/>} title="Low Stock" value={low} note="Need attention"/>
-      <Stat icon={<IndianRupee/>} title="Catalogue Value" value={"₹"+items.reduce((s,p)=>s+p.price*p.stock,0).toLocaleString("en-IN")} note="Current stock value"/>
-    </div>
-
-    {showAdd&&<div style={formCard}>
-      <div style={formHead}>
-        <div><h2>Add Product</h2><p>Create a product for your tenant.</p></div>
-        <button style={close} onClick={()=>setShowAdd(false)}>×</button>
-      </div>
-      <div style={formGrid}>
-        <input style={input} placeholder="Product name"/>
-        <input style={input} placeholder="Price"/>
-        <input style={input} placeholder="Stock quantity"/>
-        <select style={input}><option>ACTIVE</option><option>INACTIVE</option></select>
-      </div>
-      <button style={primary} onClick={()=>setShowAdd(false)}><Save size={16}/> Save Product</button>
-    </div>}
-
-    <div style={toolbar}>
-      <div style={searchBox}><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search products or vendors..."/></div>
-      <button style={secondary}><RefreshCw size={16}/> Refresh</button>
-    </div>
-
-    <div style={tableCard}>
-      <div style={tableHead}>
-        <div><h2>Product Catalogue</h2><p>{filtered.length} products in your tenant</p></div>
-      </div>
-      <table style={table}>
-        <thead><tr><th>PRODUCT</th><th>VENDOR</th><th>PRICE</th><th>STOCK</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
-        <tbody>{filtered.map(p=><tr key={p.id}>
-          <td><div style={itemCell}><div style={iconBox}><Package size={18}/></div><div><strong>{p.name}</strong><small>Product #{p.id}</small></div></div></td>
-          <td>{p.vendor}</td>
-          <td><strong>₹{p.price.toLocaleString("en-IN")}</strong></td>
-          <td><b style={{color:p.stock<=5?"#d34d4d":"#25334a"}}>{p.stock}</b></td>
-          <td><Status text={p.status}/></td>
-          <td><div style={{display:"flex",gap:6}}><button style={iconBtn}><Edit3 size={15}/></button><button style={iconBtn}><Trash2 size={15}/></button></div></td>
-        </tr>)}</tbody>
-      </table>
-    </div>
-  </Page>;
+  return <TenantProducts/>;
 }
 
-function TenantVendors(){
+function useTenantCatalog(){
+  const [items,setItems]=useState([]);
+  const [vendors,setVendors]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  const load=async()=>{
+    setLoading(true);
+    setError("");
+    try{
+      const [productData,vendorData]=await Promise.all([api.products(),api.vendors()]);
+      const vendorList=Array.isArray(vendorData)?vendorData:[];
+      const names=new Map(vendorList.map(v=>[Number(v.id),v.businessName||v.vendorName||("Vendor #"+v.id)]));
+      setVendors(vendorList);
+      setItems((Array.isArray(productData)?productData:[]).map(p=>({
+        ...p,
+        name:p.productName||("Product #"+p.id),
+        vendor:names.get(Number(p.vendorId))||("Vendor #"+p.vendorId),
+        stock:Number(p.stockQuantity??0),
+        price:Number(p.price||0)
+      })));
+    }catch(e){
+      setError(e.message||"Unable to load tenant catalogue.");
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  useEffect(()=>{load();},[]);
+  return {items,setItems,vendors,loading,error,load,setError};
+}
+
+function TenantProducts(){
+  const {items, vendors, loading, error, load, setError}=useTenantCatalog();
+  const [search,setSearch]=useState("");
+  const [showAdd,setShowAdd]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [form,setForm]=useState({productName:"",description:"",vendorId:"",price:"",stockQuantity:""});
+  const filtered=useMemo(()=>items.filter(p=>(p.name+" "+p.vendor).toLowerCase().includes(search.toLowerCase())),[items,search]);
+  const stock=items.reduce((sum,p)=>sum+Number(p.stock||0),0);
+  const low=items.filter(p=>Number(p.stock||0)<=5).length;
+
+  async function saveProduct(event){
+    event.preventDefault();
+    setError("");
+    const price=Number(form.price), quantity=Number(form.stockQuantity);
+    if(!form.productName.trim()||!form.vendorId||!Number.isFinite(price)||price<0||!Number.isInteger(quantity)||quantity<0){
+      setError("Enter a product name, select a vendor, and provide a valid price and whole-number stock quantity.");
+      return;
+    }
+    try{
+      setSaving(true);
+      await api.createProduct({
+        productName:form.productName.trim(),
+        description:form.description.trim(),
+        vendorId:Number(form.vendorId),
+        price,
+        stockQuantity:quantity,
+        status:"ACTIVE"
+      });
+      setShowAdd(false);
+      setForm({productName:"",description:"",vendorId:"",price:"",stockQuantity:""});
+      await load();
+    }catch(e){setError(e.message||"Unable to create product.");}
+    finally{setSaving(false);}
+  }
+
+  async function removeProduct(product){
+    if(!window.confirm("Delete "+product.name+"?"))return;
+    try{setError("");await api.deleteProduct(product.id);await load();}
+    catch(e){setError(e.message||"Unable to delete product.");}
+  }
+
   return <Page>
-    <Header eyebrow="VENDOR MANAGEMENT" title="Vendors" desc="Manage vendors registered under your tenant." action={<button style={primary}><Plus size={17}/> Add Vendor</button>}/>
+    <Header eyebrow="PRODUCT MANAGEMENT" title="Products" desc="Manage products belonging to your tenant." action={<button style={primary} onClick={()=>setShowAdd(true)}><Plus size={17}/> Add Product</button>}/>
+    {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
     <div style={stats}>
-      <Stat icon={<Users/>} title="Total Vendors" value={vendors.length} note="Registered sellers"/>
-      <Stat icon={<CheckCircle2/>} title="Active" value={3} note="Currently active"/>
-      <Stat icon={<Package/>} title="Products" value="25" note="Vendor products"/>
-      <Stat icon={<Truck/>} title="Orders" value="46" note="Vendor orders"/>
+      <Stat icon={<Package/>} title="Total Products" value={loading?"—":items.length} note="Live tenant catalogue"/>
+      <Stat icon={<Boxes/>} title="Total Stock" value={loading?"—":stock} note="Units available"/>
+      <Stat icon={<AlertTriangle/>} title="Low Stock" value={loading?"—":low} note="At or below 5 units"/>
+      <Stat icon={<IndianRupee/>} title="Catalogue Value" value={loading?"—":"₹"+items.reduce((sum,p)=>sum+p.price*p.stock,0).toLocaleString("en-IN")} note="Current stock value"/>
     </div>
-    <div style={grid3}>{vendors.map(v=><div style={vendorCard} key={v.id}>
-      <div style={vendorTop}><div style={avatar}>{v.name.charAt(0)}</div><Status text={v.status}/></div>
-      <h2>{v.name}</h2><p>{v.business}</p>
-      <small>{v.email}</small>
-      <div style={vendorStats}><span><b>{v.products}</b> Products</span><span><b>{v.orders}</b> Orders</span></div>
-      <button style={secondaryWide}>View Vendor <ArrowUpRight size={15}/></button>
-    </div>)}</div>
+    {showAdd&&<form onSubmit={saveProduct} style={formCard}>
+      <div style={formHead}><div><h2>Add Product</h2><p>Create a product for this tenant.</p></div><button type="button" style={close} onClick={()=>setShowAdd(false)}>×</button></div>
+      <div style={formGrid}>
+        <input style={input} value={form.productName} onChange={e=>setForm({...form,productName:e.target.value})} placeholder="Product name" required/>
+        <input style={input} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Description"/>
+        <select style={input} value={form.vendorId} onChange={e=>setForm({...form,vendorId:e.target.value})} required>
+          <option value="">Select vendor</option>{vendors.map(v=><option key={v.id} value={v.id}>{v.businessName||v.vendorName} (#{v.id})</option>)}
+        </select>
+        <input style={input} type="number" min="0" step="0.01" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} placeholder="Price" required/>
+        <input style={input} type="number" min="0" step="1" value={form.stockQuantity} onChange={e=>setForm({...form,stockQuantity:e.target.value})} placeholder="Stock quantity" required/>
+      </div>
+      <button style={primary} disabled={saving||vendors.length===0}><Save size={16}/>{saving?"Saving...":"Save Product"}</button>
+      {!vendors.length&&<p>No vendors are available in this tenant. Create/approve a vendor first.</p>}
+    </form>}
+    <div style={toolbar}><div style={searchBox}><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search products or vendors..."/></div><button style={secondary} onClick={load}><RefreshCw size={16}/> Refresh</button></div>
+    <div style={tableCard}><div style={tableHead}><h2>Product Catalogue</h2><p>{loading?"Loading...":filtered.length+" live products in your tenant"}</p></div>
+      <div style={{overflowX:"auto"}}><table style={table}><thead><tr><th>PRODUCT</th><th>VENDOR</th><th>PRICE</th><th>STOCK</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
+        <tbody>
+          {loading&&<tr><td colSpan="6" style={{padding:25,textAlign:"center"}}>Loading products...</td></tr>}
+          {!loading&&filtered.map(p=><tr key={p.id}><td><div style={itemCell}><div style={iconBox}><Package size={18}/></div><div><strong>{p.name}</strong><small>Product #{p.id}</small></div></div></td><td>{p.vendor}</td><td><strong>{"₹"+p.price.toLocaleString("en-IN")}</strong></td><td><b style={{color:p.stock<=5?"#d34d4d":"#25334a"}}>{p.stock}</b></td><td><Status text={p.status||"ACTIVE"}/></td><td><button style={iconBtn} onClick={()=>removeProduct(p)} title="Delete product"><Trash2 size={15}/></button></td></tr>)}
+          {!loading&&!error&&!filtered.length&&<tr><td colSpan="6" style={{padding:25,textAlign:"center"}}>No products found.</td></tr>}
+        </tbody>
+      </table></div>
+    </div>
   </Page>;
 }
 
 function TenantInventory(){
-  const [stock,setStock]=useState(products.map(p=>({...p})));
+  const {items,setItems,loading,error,load,setError}=useTenantCatalog();
+  const [saving,setSaving]=useState(null);
+  const healthy=items.filter(p=>p.stock>5).length;
+  const low=items.filter(p=>p.stock>0&&p.stock<=5).length;
+  const empty=items.filter(p=>p.stock===0).length;
+
+  async function saveStock(product){
+    try{
+      setSaving(product.id);setError("");
+      await api.updateProduct(product.id,{
+        productName:product.productName,
+        description:product.description,
+        price:Number(product.price),
+        stockQuantity:Number(product.stock),
+        status:product.status||"ACTIVE"
+      });
+      await load();
+    }catch(e){setError(e.message||"Unable to update stock.");}
+    finally{setSaving(null);}
+  }
+
   return <Page>
-    <Header eyebrow="INVENTORY MANAGEMENT" title="Inventory" desc="Monitor and maintain stock across your tenant." action={<button style={secondary}><RefreshCw size={16}/> Refresh</button>}/>
+    <Header eyebrow="INVENTORY MANAGEMENT" title="Inventory" desc="Monitor and maintain stock across your tenant." action={<button style={secondary} onClick={load}><RefreshCw size={16}/> Refresh</button>}/>
+    {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
     <div style={stats}>
-      <Stat icon={<Boxes/>} title="Total Units" value={stock.reduce((s,p)=>s+p.stock,0)} note="Available inventory"/>
-      <Stat icon={<CheckCircle2/>} title="Healthy Stock" value={stock.filter(p=>p.stock>5).length} note="Products"/>
-      <Stat icon={<AlertTriangle/>} title="Low Stock" value={stock.filter(p=>p.stock>0&&p.stock<=5).length} note="Below threshold"/>
-      <Stat icon={<Truck/>} title="Out of Stock" value={stock.filter(p=>p.stock===0).length} note="Needs restocking"/>
+      <Stat icon={<Boxes/>} title="Total Units" value={loading?"—":items.reduce((sum,p)=>sum+p.stock,0)} note="Available inventory"/>
+      <Stat icon={<CheckCircle2/>} title="Healthy Stock" value={loading?"—":healthy} note="Products above 5 units"/>
+      <Stat icon={<AlertTriangle/>} title="Low Stock" value={loading?"—":low} note="Below threshold"/>
+      <Stat icon={<Truck/>} title="Out of Stock" value={loading?"—":empty} note="Needs restocking"/>
     </div>
-    <div style={tableCard}>
-      <div style={tableHead}><h2>Stock Overview</h2><p>Update inventory quantities for tenant products.</p></div>
-      <table style={table}><thead><tr><th>PRODUCT</th><th>VENDOR</th><th>STOCK LEVEL</th><th>STATUS</th><th>UPDATE</th></tr></thead>
-      <tbody>{stock.map(p=><tr key={p.id}>
-        <td><strong>{p.name}</strong><small>Product #{p.id}</small></td>
-        <td>{p.vendor}</td>
-        <td><div style={{display:"flex",alignItems:"center",gap:12}}><div style={progress}><div style={{...progressFill,width:`${Math.min(p.stock,40)/40*100}%`}}/></div><b>{p.stock}</b></div></td>
-        <td><Status text={p.stock===0?"OUT OF STOCK":p.stock<=5?"LOW STOCK":"HEALTHY"}/></td>
-        <td><input style={smallInput} type="number" min="0" value={p.stock} onChange={e=>setStock(stock.map(x=>x.id===p.id?{...x,stock:Number(e.target.value)}:x))}/></td>
-      </tr>)}</tbody></table>
+    <div style={tableCard}><div style={tableHead}><h2>Stock Overview</h2><p>Updates are saved to the Product Service.</p></div>
+      <div style={{overflowX:"auto"}}><table style={table}><thead><tr><th>PRODUCT</th><th>VENDOR</th><th>STOCK LEVEL</th><th>STATUS</th><th>UPDATE</th><th></th></tr></thead>
+      <tbody>
+        {loading&&<tr><td colSpan="6" style={{padding:25,textAlign:"center"}}>Loading inventory...</td></tr>}
+        {!loading&&items.map(p=><tr key={p.id}><td><strong>{p.name}</strong><small>Product #{p.id}</small></td><td>{p.vendor}</td><td><b>{p.stock}</b></td><td><Status text={p.stock===0?"OUT OF STOCK":p.stock<=5?"LOW STOCK":"HEALTHY"}/></td><td><input style={smallInput} type="number" min="0" step="1" value={p.stock} onChange={e=>setItems(items.map(x=>x.id===p.id?{...x,stock:Number(e.target.value)}:x))}/></td><td><button style={secondarySmall} disabled={saving===p.id} onClick={()=>saveStock(p)}><Save size={14}/>{saving===p.id?"Saving":"Save"}</button></td></tr>)}
+      </tbody></table></div>
     </div>
   </Page>;
 }
 
 function TenantOrders(){
+  const [orders,setOrders]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [refresh,setRefresh]=useState(0);
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);setError("");
+      try{const data=await api.orders();if(active)setOrders(Array.isArray(data)?data:[]);}
+      catch(e){if(active)setError(e.message||"Unable to load tenant orders.");}
+      finally{if(active)setLoading(false);}
+    }
+    load();return()=>{active=false;};
+  },[refresh]);
+  const total=orders.reduce((sum,o)=>sum+Number(o.totalAmount||0),0);
+  const pending=orders.filter(o=>["PLACED","PENDING"].includes(String(o.status||"").toUpperCase())).length;
+  const confirmed=orders.filter(o=>String(o.status||"").toUpperCase()==="CONFIRMED").length;
+
   return <Page>
-    <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Review orders placed within your tenant." action={<button style={secondary}><RefreshCw size={16}/> Refresh</button>}/>
+    <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Review orders placed within your tenant." action={<button style={secondary} onClick={()=>setRefresh(v=>v+1)}><RefreshCw size={16}/> Refresh</button>}/>
+    {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
     <div style={stats}>
-      <Stat icon={<Truck/>} title="Total Orders" value={orders.length} note="Tenant orders"/>
-      <Stat icon={<Clock3/>} title="Pending" value={3} note="Need attention"/>
-      <Stat icon={<CheckCircle2/>} title="Confirmed" value={1} note="Confirmed orders"/>
-      <Stat icon={<IndianRupee/>} title="Order Value" value="₹3,39,500" note="Total value"/>
+      <Stat icon={<Truck/>} title="Total Orders" value={loading?"—":orders.length} note="Live tenant orders"/>
+      <Stat icon={<Clock3/>} title="Pending" value={loading?"—":pending} note="Need attention"/>
+      <Stat icon={<CheckCircle2/>} title="Confirmed" value={loading?"—":confirmed} note="Confirmed orders"/>
+      <Stat icon={<IndianRupee/>} title="Order Value" value={loading?"—":"₹"+total.toLocaleString("en-IN")} note="Returned order value"/>
     </div>
-    <div style={tableCard}>
-      <div style={tableHead}><h2>Tenant Orders</h2><p>Latest orders from your marketplace.</p></div>
-      <table style={table}><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>VENDOR</th><th>STATUS</th><th>TOTAL</th><th></th></tr></thead>
-      <tbody>{orders.map(o=><tr key={o.id}><td><strong>Order #{o.id}</strong></td><td>Customer #{o.customer}</td><td>{o.vendor}</td><td><Status text={o.status}/></td><td><strong>₹{o.total.toLocaleString("en-IN")}</strong></td><td><button style={secondarySmall}>View <ArrowUpRight size={14}/></button></td></tr>)}</tbody></table>
+    <div style={tableCard}><div style={tableHead}><h2>Tenant Orders</h2><p>Latest orders from your marketplace.</p></div>
+      <div style={{overflowX:"auto"}}><table style={table}><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>ITEMS</th><th>STATUS</th><th>TOTAL</th><th></th></tr></thead>
+      <tbody>
+        {loading&&<tr><td colSpan="6" style={{padding:25,textAlign:"center"}}>Loading orders...</td></tr>}
+        {!loading&&orders.map(o=><tr key={o.id}><td><strong>{"Order #"+o.id}</strong></td><td>{"Customer #"+o.customerId}</td><td>{(o.items||[]).length}</td><td><Status text={o.status||"UNKNOWN"}/></td><td><strong>{"₹"+Number(o.totalAmount||0).toLocaleString("en-IN")}</strong></td><td><Link style={secondarySmall} to={"/orders/"+o.id}>View <Truck size={14}/></Link></td></tr>)}
+        {!loading&&!error&&!orders.length&&<tr><td colSpan="6" style={{padding:25,textAlign:"center"}}>No orders returned by the API.</td></tr>}
+      </tbody></table></div>
     </div>
   </Page>;
 }
 
 function TenantSettings(){
-  const [saved,setSaved]=useState(false);
+  const tenantId=localStorage.getItem("marketgrid_tenant")||"unknown";
   return <Page>
-    <Header eyebrow="TENANT CONFIGURATION" title="Store Settings" desc="Manage your tenant store configuration."/>
+    <Header eyebrow="TENANT CONFIGURATION" title="Store Settings" desc="Tenant configuration overview."/>
     <div style={settingsGrid}>
-      <div style={settingsCard}><Store size={25} color="#2864e6"/><h2>Store Profile</h2><p>Basic information about your marketplace.</p>
-        <label>Store Name<input style={input} defaultValue="MarketGrid Tenant #1"/></label>
-        <label>Store Email<input style={input} defaultValue="admin@test.com"/></label>
-        <label>Support Phone<input style={input} defaultValue="+91 98765 43210"/></label>
-      </div>
-      <div style={settingsCard}><Settings size={25} color="#2864e6"/><h2>Tenant Security</h2><p>Security controls for your tenant.</p>
-        <Toggle text="JWT Authentication" active/><Toggle text="Tenant Data Isolation" active/><Toggle text="Vendor Access Control" active/><Toggle text="Order Isolation" active/>
-      </div>
+      <div style={settingsCard}><Store size={25} color="#2864e6"/><h2>Store Profile</h2><p>Store identity resolved from your authenticated session.</p><label>Tenant ID<input style={input} value={tenantId} readOnly/></label><label>Store Slug<input style={input} value="Managed in Tenant Service" readOnly/></label></div>
+      <div style={settingsCard}><Settings size={25} color="#2864e6"/><h2>Tenant Security</h2><p>Security is enforced by backend JWT and tenant-aware APIs.</p><div style={{padding:"12px 0"}}><Status text="JWT AUTHENTICATION"/></div><div style={{padding:"12px 0"}}><Status text="TENANT DATA ISOLATION"/></div><p style={{color:"#75839a",fontSize:13}}>Store profile editing is not available yet because no tenant settings update endpoint exists. No unsaved changes are represented as saved.</p></div>
     </div>
-    <button style={{...primary,marginTop:20}} onClick={()=>setSaved(true)}>{saved?<><CheckCircle2 size={16}/> Saved</>:<><Save size={16}/> Save Changes</>}</button>
   </Page>;
 }
 

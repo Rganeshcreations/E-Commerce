@@ -20,6 +20,11 @@ export function AppProvider({ children }) {
   const login = (data) => {
     localStorage.setItem("marketgrid_token", data.token);
     localStorage.setItem("marketgrid_user", JSON.stringify(data));
+    localStorage.setItem("marketgrid_role", data.role || "");
+    localStorage.setItem("marketgrid_user_id", String(data.userId ?? data.id ?? ""));
+    localStorage.setItem("marketgrid_customer_id", String(data.userId ?? data.id ?? ""));
+    localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+    localStorage.setItem("marketgrid_email", data.email || "");
     setUser(data);
   };
 

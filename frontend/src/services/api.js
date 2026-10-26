@@ -1,5 +1,5 @@
-﻿
-const BASE = "http://localhost:8080";
+
+const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 async function request(path, options = {}) {
   const token = localStorage.getItem("marketgrid_token");
@@ -30,12 +30,37 @@ async function request(path, options = {}) {
   if (!response.ok) {
     throw new Error(
       data?.message ||
+      data?.detail ||
       data?.error ||
       `Request failed (${response.status})`
     );
   }
 
   return data;
+}
+
+export function getUser() {
+  const token = localStorage.getItem("marketgrid_token");
+  const role = localStorage.getItem("marketgrid_role");
+  if (!token || !role) return null;
+  return {
+    token,
+    role,
+    id: localStorage.getItem("marketgrid_user_id"),
+    userId: localStorage.getItem("marketgrid_user_id"),
+    tenantId: localStorage.getItem("marketgrid_tenant"),
+    email: localStorage.getItem("marketgrid_email") || ""
+  };
+}
+
+export function logout() {
+  [
+    "marketgrid_token", "marketgrid_role", "marketgrid_user_id",
+    "marketgrid_customer_id", "marketgrid_tenant", "marketgrid_email",
+    "marketgrid_user", "marketgrid_pending_checkout"
+  ].forEach(key => localStorage.removeItem(key));
+  localStorage.removeItem("marketgrid_cart");
+  window.dispatchEvent(new Event("marketgrid_cart_updated"));
 }
 
 export const api = {
@@ -46,12 +71,48 @@ export const api = {
       body: JSON.stringify(body)
     }),
 
+  register: (body) =>
+    request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  // Business domains: public read, SUPER_ADMIN-only create enforced by backend
+  domains: () => request("/api/domains"),
+  createDomain: (body) => request("/api/domains", {
+    method: "POST", body: JSON.stringify(body)
+  }),
+  publicTenants: () => request("/api/public/tenants"),
+  submitTenantApplication: (body) =>
+    request("/api/tenant-applications", { method: "POST", body: JSON.stringify(body) }),
+  submitVendorApplication: (body) =>
+    request("/api/vendor-applications", { method: "POST", body: JSON.stringify(body) }),
+
+  users: () => request("/api/users"),
+
+  createUser: (body) =>
+    request("/api/users", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  deleteUser: (id) => request(`/api/users/${id}`, { method: "DELETE" }),
+
+  createVendor: (body) =>
+    request("/api/vendors", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
   // Products
   products: () => request("/api/products"),
 
   product: (id) => request(`/api/products/${id}`),
 
-  vendorProducts: () => request("/api/products/vendor/1"),
+  vendorProducts: async () => {
+    const vendor = await request("/api/vendors/me");
+    return request(`/api/products/vendor/${vendor.id}`);
+  },
 
   productsByVendor: (vendorId) =>
     request(`/api/products/vendor/${vendorId}`),
@@ -75,6 +136,21 @@ export const api = {
 
   // Vendors
   vendors: () => request("/api/vendors"),
+  myVendor: () => request("/api/vendors/me"),
+
+  // Payments
+  createPayment: (body) =>
+    request("/api/payments", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  payments: () => request("/api/payments"),
+
+  payment: (id) => request(`/api/payments/${id}`),
+
+  paymentByOrder: (orderId) =>
+    request(`/api/payments/order/${orderId}`),
 
   // Orders
   orders: () => request("/api/orders"),
@@ -115,6 +191,9 @@ export const api = {
   // Tenant applications
   tenantApplications: () =>
     request("/api/tenant-applications"),
+
+  myTenantApplications: () =>
+    request("/api/tenant-applications/mine"),
 
   pendingTenantApplications: () =>
     request("/api/tenant-applications/pending"),

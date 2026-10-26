@@ -1,4 +1,5 @@
-import React,{useState} from "react";
+import React,{useEffect,useState} from "react";
+import { api } from "../services/api";
 import {
   Store,Users,Package,Truck,BarChart3,Settings,
   Search,Plus,RefreshCw,MoreHorizontal,ArrowUpRight,
@@ -6,38 +7,59 @@ import {
   TrendingUp,IndianRupee
 } from "lucide-react";
 
-const DATA={
-  tenants:[
-    {id:1,name:"Tech Store",owner:"Admin One",email:"admin@techstore.com",vendors:12,products:86,status:"ACTIVE"},
-    {id:2,name:"Gear Hub",owner:"Admin Two",email:"admin@gearhub.com",vendors:8,products:54,status:"ACTIVE"},
-    {id:3,name:"Smart World",owner:"Admin Three",email:"admin@smartworld.com",vendors:15,products:123,status:"ACTIVE"},
-    {id:4,name:"Digital Mart",owner:"Admin Four",email:"admin@digitalmart.com",vendors:6,products:41,status:"PENDING"}
-  ],
-  users:[
-    {id:7,name:"Super Admin",email:"superadmin@marketgrid.com",role:"SUPER_ADMIN",tenant:"Platform",status:"ACTIVE"},
-    {id:1,name:"Admin User",email:"admin@test.com",role:"TENANT_ADMIN",tenant:"Tech Store",status:"ACTIVE"},
-    {id:12,name:"Krishna",email:"krishna@gmail.com",role:"VENDOR",tenant:"Tech Store",status:"ACTIVE"},
-    {id:10,name:"Customer One",email:"customer@test.com",role:"CUSTOMER",tenant:"Tech Store",status:"ACTIVE"},
-    {id:15,name:"Rahul Kumar",email:"rahul@test.com",role:"CUSTOMER",tenant:"Gear Hub",status:"ACTIVE"}
-  ],
-  vendors:[
-    {id:1,name:"Krishna",business:"Tech Store",email:"krishna@gmail.com",products:2,orders:8,status:"ACTIVE"},
-    {id:2,name:"Ravi Kumar",business:"Gear Hub",email:"ravi@gearhub.com",products:14,orders:21,status:"ACTIVE"},
-    {id:3,name:"Suresh",business:"Smart World",email:"suresh@smartworld.com",products:9,orders:17,status:"ACTIVE"},
-    {id:4,name:"Anil",business:"Digital Mart",email:"anil@digitalmart.com",products:6,orders:11,status:"PENDING"}
-  ],
-  products:[
-    {id:1,name:"Gaming Laptop",vendor:"Tech Store",price:65000,stock:4,status:"ACTIVE"},
-    {id:2,name:"iPhone Flip",vendor:"Tech Store",price:0,stock:0,status:"ACTIVE"},
-    {id:3,name:"Mechanical Keyboard",vendor:"Gear Hub",price:2500,stock:19,status:"ACTIVE"},
-    {id:4,name:"Wireless Mouse",vendor:"Smart World",price:1200,stock:40,status:"ACTIVE"},
-    {id:5,name:"Gaming Monitor",vendor:"Digital Mart",price:18000,stock:12,status:"ACTIVE"}
-  ]
-};
-
 export default function AdminManagement({type="tenants"}){
   const [search,setSearch]=useState("");
   const [refresh,setRefresh]=useState(0);
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    let active=true;
+    async function loadRows(){
+      if(["orders","analytics","settings"].includes(type)){
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try{
+        let data=[];
+        if(type==="tenants"){
+          data=await api.tenants();
+          data=(Array.isArray(data)?data:[]).map(t=>({
+            id:t.id,name:t.name,owner:"—",email:t.ownerEmail||"—",
+            vendors:"—",products:"—",status:t.active?"ACTIVE":"INACTIVE",slug:t.slug
+          }));
+        }else if(type==="users"){
+          data=await api.users();
+          data=(Array.isArray(data)?data:[]).map(u=>({
+            id:u.id,name:u.fullName,email:u.email,role:u.role,
+            tenant:u.tenantId,status:u.active?"ACTIVE":"INACTIVE"
+          }));
+        }else if(type==="vendors"){
+          data=await api.vendors();
+          data=(Array.isArray(data)?data:[]).map(v=>({
+            id:v.id,name:v.vendorName,business:v.businessName,email:v.email,
+            products:"—",orders:"—",status:v.status||"ACTIVE",tenantId:v.tenantId
+          }));
+        }else if(type==="products"){
+          data=await api.products();
+          data=(Array.isArray(data)?data:[]).map(p=>({
+            id:p.id,name:p.productName,vendor:`Vendor #${p.vendorId}`,
+            price:p.price,stock:p.stockQuantity,status:p.status||"ACTIVE"
+          }));
+        }
+        if(active)setRows(data);
+      }catch(e){
+        if(active){setRows([]);setError(e.message||"Unable to load records from the backend.");}
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    loadRows();
+    return ()=>{active=false;};
+  },[type,refresh]);
 
   const config={
     tenants:{eyebrow:"TENANT MANAGEMENT",title:"Tenants",desc:"Manage independent stores across the MarketGrid platform.",icon:Store,add:"Add Tenant"},
@@ -54,7 +76,7 @@ export default function AdminManagement({type="tenants"}){
 
   const c=config[type];
   const Icon=c.icon;
-  const rows=DATA[type].filter(x=>
+  const filteredRows=rows.filter(x=>
     JSON.stringify(x).toLowerCase().includes(search.toLowerCase())
   );
 
@@ -63,11 +85,13 @@ export default function AdminManagement({type="tenants"}){
       <Header eyebrow={c.eyebrow} title={c.title} desc={c.desc}/>
 
       <div style={statsGrid}>
-        <Stat icon={<Icon size={21}/>} title={`Total ${c.title}`} value={DATA[type].length}/>
-        <Stat icon={<CheckCircle2 size={21}/>} title="Active" value={DATA[type].filter(x=>x.status==="ACTIVE").length}/>
-        <Stat icon={<Clock3 size={21}/>} title="Pending" value={DATA[type].filter(x=>x.status==="PENDING").length}/>
+        <Stat icon={<Icon size={21}/>} title={`Total ${c.title}`} value={loading?"—":rows.length}/>
+        <Stat icon={<CheckCircle2 size={21}/>} title="Active" value={loading?"—":rows.filter(x=>x.status==="ACTIVE").length}/>
+        <Stat icon={<Clock3 size={21}/>} title="Pending" value={loading?"—":rows.filter(x=>x.status==="PENDING").length}/>
         <Stat icon={<Activity size={21}/>} title="Platform Status" value="Healthy"/>
       </div>
+
+      {error && <div role="alert" style={{...tableCard,padding:"14px",marginBottom:"16px",color:"#b42318"}}>{error}</div>}
 
       <div style={toolbar}>
         <div style={searchBox}>
@@ -79,20 +103,29 @@ export default function AdminManagement({type="tenants"}){
           />
         </div>
 
-        <button style={secondary} onClick={()=>setRefresh(refresh+1)}>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}>
           <RefreshCw size={16}/> Refresh
         </button>
 
-        <button style={primary}>
-          <Plus size={17}/> {c.add}
-        </button>
+        {type==="products" ? null : (
+          <button
+            style={primary}
+            onClick={() => {
+              if (type === "vendors") window.location.assign("/admin/users");
+              else if (type === "tenants") window.location.assign("/admin/tenants");
+              else if (type === "users") window.location.assign("/admin/users");
+            }}
+          >
+            <Plus size={17}/> {c.add}
+          </button>
+        )}
       </div>
 
       <div style={tableCard}>
         <div style={tableHead}>
           <div>
             <h2>{c.title} Directory</h2>
-            <p>{rows.length} records found</p>
+            <p>{loading?"Loading records...":`${filteredRows.length} records found`}</p>
           </div>
           <MoreHorizontal size={20} color="#8b98ac"/>
         </div>
@@ -109,7 +142,8 @@ export default function AdminManagement({type="tenants"}){
             </thead>
 
             <tbody>
-              {rows.map(x=>(
+              {loading && <tr><td colSpan="7" style={{textAlign:"center",padding:"28px"}}>Loading records from the server...</td></tr>}
+            {!loading && filteredRows.map(x=>(
                 <tr key={x.id}>
                   <td>#{x.id}</td>
 
@@ -151,6 +185,7 @@ export default function AdminManagement({type="tenants"}){
                   <td><button style={more}><MoreHorizontal size={17}/></button></td>
                 </tr>
               ))}
+              {!loading && !error && filteredRows.length===0 && <tr><td colSpan="7" style={{textAlign:"center",padding:"28px"}}>No records found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -160,94 +195,161 @@ export default function AdminManagement({type="tenants"}){
 }
 
 function AdminOrders(){
-  const orders=[
-    [8,10,"Tech Store","PLACED",65000],
-    [7,10,"Tech Store","PLACED",65000],
-    [6,10,"Tech Store + Gear Hub","PLACED",67500],
-    [5,1,"Tech Store","CONFIRMED",65000],
-    [4,1,"Tech Store + Gear Hub","PLACED",67500],
-    [3,1,"Tech Store + Gear Hub","PLACED",67500]
-  ];
+  const [orders,setOrders]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [refresh,setRefresh]=useState(0);
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);
+      setError("");
+      try{
+        const data=await api.orders();
+        if(active)setOrders(Array.isArray(data)?data:[]);
+      }catch(e){
+        if(active){setOrders([]);setError(e.message||"Unable to load orders.");}
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    load();
+    return ()=>{active=false;};
+  },[refresh]);
+
+  const totalValue=orders.reduce((sum,o)=>sum+Number(o.totalAmount||0),0);
+  const pending=orders.filter(o=>["PLACED","PENDING","CONFIRMED"].includes(String(o.status||"").toUpperCase())).length;
+  const completed=orders.filter(o=>String(o.status||"").toUpperCase()==="DELIVERED").length;
+  const recent=[...orders].sort((a,b)=>Number(b.id)-Number(a.id));
 
   return(
     <div style={page}>
-      <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Monitor marketplace orders across all tenants and vendors."/>
-
+      <Header eyebrow="ORDER MANAGEMENT" title="Orders" desc="Monitor orders visible to your platform administrator account."/>
+      {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
       <div style={statsGrid}>
-        <Stat icon={<Truck size={21}/>} title="Total Orders" value="12,480"/>
-        <Stat icon={<Clock3 size={21}/>} title="Pending" value="284"/>
-        <Stat icon={<CheckCircle2 size={21}/>} title="Completed" value="11,920"/>
-        <Stat icon={<IndianRupee size={21}/>} title="Order Value" value="₹8.4Cr"/>
+        <Stat icon={<Truck size={21}/>} title="Total Orders" value={loading?"—":orders.length}/>
+        <Stat icon={<Clock3 size={21}/>} title="Pending" value={loading?"—":pending}/>
+        <Stat icon={<CheckCircle2 size={21}/>} title="Delivered" value={loading?"—":completed}/>
+        <Stat icon={<IndianRupee size={21}/>} title="Order Value" value={loading?"—":"₹"+totalValue.toLocaleString("en-IN")}/>
       </div>
-
       <div style={toolbar}>
-        <div style={searchBox}>
-          <Search size={18}/>
-          <input placeholder="Search orders, customers or vendors..."/>
-        </div>
-        <button style={secondary}><RefreshCw size={16}/> Refresh</button>
+        <span style={{color:"#75839a"}}>{loading?"Loading orders...":orders.length+" orders returned by the API"}</span>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}><RefreshCw size={16}/> Refresh</button>
       </div>
-
       <div style={tableCard}>
-        <div style={tableHead}>
-          <div><h2>Marketplace Orders</h2><p>Latest platform orders</p></div>
+        <div style={tableHead}><div><h2>Marketplace Orders</h2><p>Live order records</p></div></div>
+        <div style={{overflowX:"auto"}}>
+          <table style={table}>
+            <thead><tr><th>ORDER</th><th>CUSTOMER</th><th>VENDOR(S)</th><th>STATUS</th><th>TOTAL</th></tr></thead>
+            <tbody>
+              {loading&&<tr><td colSpan="5" style={{padding:28,textAlign:"center"}}>Loading orders...</td></tr>}
+              {!loading&&recent.map(order=>{
+                const vendors=[...new Set((order.items||[]).map(item=>item.vendorId).filter(id=>id!=null))];
+                return <tr key={order.id}>
+                  <td><strong>{"Order #"+order.id}</strong></td>
+                  <td>{"Customer #"+order.customerId}</td>
+                  <td>{vendors.length?vendors.map(id=>"Vendor #"+id).join(", "):"—"}</td>
+                  <td><Status status={order.status||"UNKNOWN"}/></td>
+                  <td><strong>{"₹"+Number(order.totalAmount||0).toLocaleString("en-IN")}</strong></td>
+                </tr>;
+              })}
+              {!loading&&!error&&orders.length===0&&<tr><td colSpan="5" style={{padding:28,textAlign:"center"}}>No orders returned by the API.</td></tr>}
+            </tbody>
+          </table>
         </div>
-
-        <table style={table}>
-          <thead><tr><th>ORDER</th><th>CUSTOMER</th><th>VENDOR</th><th>STATUS</th><th>TOTAL</th><th></th></tr></thead>
-          <tbody>
-            {orders.map(o=>(
-              <tr key={o[0]}>
-                <td><strong>Order #{o[0]}</strong></td>
-                <td>Customer #{o[1]}</td>
-                <td>{o[2]}</td>
-                <td><Status status={o[3]}/></td>
-                <td><strong>₹{o[4].toLocaleString("en-IN")}</strong></td>
-                <td><button style={more}><ArrowUpRight size={17}/></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
 }
 
 function AdminAnalytics(){
+  const [metrics,setMetrics]=useState({
+    orders:[],products:[],vendors:[],tenants:[],users:[]
+  });
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [refresh,setRefresh]=useState(0);
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);
+      setError("");
+      try{
+        const [orders,products,vendors,tenants,users]=await Promise.all([
+          api.orders(),api.products(),api.vendors(),api.tenants(),api.users()
+        ]);
+        if(active)setMetrics({
+          orders:Array.isArray(orders)?orders:[],
+          products:Array.isArray(products)?products:[],
+          vendors:Array.isArray(vendors)?vendors:[],
+          tenants:Array.isArray(tenants)?tenants:[],
+          users:Array.isArray(users)?users:[]
+        });
+      }catch(e){
+        if(active)setError(e.message||"Unable to load analytics from the backend.");
+      }finally{
+        if(active)setLoading(false);
+      }
+    }
+    load();
+    return ()=>{active=false;};
+  },[refresh]);
+
+  const gmv=metrics.orders.reduce((sum,order)=>sum+Number(order.totalAmount||0),0);
+  const customers=metrics.users.filter(user=>user.role==="CUSTOMER").length;
+  const statuses=["PLACED","CONFIRMED","SHIPPED","DELIVERED","CANCELLED"];
+  const statusCounts=statuses.map(status=>({
+    status,
+    count:metrics.orders.filter(order=>String(order.status||"").toUpperCase()===status).length
+  }));
+  const maxCount=Math.max(1,...statusCounts.map(item=>item.count));
+
   return(
     <div style={page}>
-      <Header eyebrow="PLATFORM ANALYTICS" title="Analytics" desc="Monitor MarketGrid marketplace performance."/>
-
-      <div style={statsGrid}>
-        <Stat icon={<TrendingUp size={21}/>} title="GMV" value="₹8.4Cr"/>
-        <Stat icon={<ShoppingIcon/>} title="Orders" value="12,480"/>
-        <Stat icon={<Users size={21}/>} title="Customers" value="18,920"/>
-        <Stat icon={<Store size={21}/>} title="Tenants" value="128"/>
+      <Header eyebrow="PLATFORM ANALYTICS" title="Analytics" desc="Live totals calculated from the marketplace APIs."/>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
+        <button style={secondary} onClick={()=>setRefresh(value=>value+1)}><RefreshCw size={16}/> Refresh</button>
       </div>
-
+      {error&&<div role="alert" style={{...tableCard,padding:14,marginBottom:18,color:"#b42318"}}>{error}</div>}
+      <div style={statsGrid}>
+        <Stat icon={<TrendingUp size={21}/>} title="Order Value" value={loading?"—":"₹"+gmv.toLocaleString("en-IN")}/>
+        <Stat icon={<ShoppingIcon/>} title="Orders" value={loading?"—":metrics.orders.length}/>
+        <Stat icon={<Users size={21}/>} title="Customers" value={loading?"—":customers}/>
+        <Stat icon={<Store size={21}/>} title="Active Tenants" value={loading?"—":metrics.tenants.filter(tenant=>tenant.active).length}/>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:"20px"}}>
         <div style={chartCard}>
-          <h2>Marketplace Performance</h2>
-          <p>Monthly order activity</p>
-          <div style={bars}>
-            {[45,62,54,76,68,88,72,94,81,96,86,100].map((h,i)=>(
-              <div key={i} style={barWrap}>
-                <div style={{...bar,height:`${h}%`}}/>
-                <small>{["J","F","M","A","M","J","J","A","S","O","N","D"][i]}</small>
+          <h2>Orders by Status</h2>
+          <p>Calculated from current order records</p>
+          {loading?<p>Loading analytics...</p>:statusCounts.map(item=>(
+            <div key={item.status} style={{display:"grid",gridTemplateColumns:"90px 1fr 40px",gap:10,alignItems:"center",margin:"16px 0"}}>
+              <small>{item.status}</small>
+              <div style={{height:12,background:"#edf0f5",borderRadius:8,overflow:"hidden"}}>
+                <div style={{height:"100%",width:(item.count/maxCount*100)+"%",background:"#2864e6",borderRadius:8}}/>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={chartCard}>
-          <h2>Platform Health</h2>
-          <p>Current system status</p>
-          {["API Gateway","User Service","Product Service","Order Service","Payment Service","Eureka"].map(x=>(
-            <div key={x} style={health}>
-              <span>{x}</span>
-              <b><CheckCircle2 size={15}/> Operational</b>
+              <strong>{item.count}</strong>
             </div>
           ))}
+        </div>
+        <div style={chartCard}>
+          <h2>Data Connectivity</h2>
+          <p>Status of dashboard data requests</p>
+          {[
+            ["Products",metrics.products.length],
+            ["Vendors",metrics.vendors.length],
+            ["Tenants",metrics.tenants.length],
+            ["User Accounts",metrics.users.length]
+          ].map(([label,count])=>(
+            <div key={label} style={health}>
+              <span>{label}</span>
+              <b>{loading?"Loading…":count+" records"}</b>
+            </div>
+          ))}
+          <p style={{color:"#75839a",fontSize:12,marginTop:14}}>
+            This is API data availability, not a live health check of every microservice.
+          </p>
         </div>
       </div>
     </div>
@@ -255,38 +357,33 @@ function AdminAnalytics(){
 }
 
 function AdminSettings(){
-  const [saved,setSaved]=useState(false);
-
   return(
     <div style={page}>
-      <Header eyebrow="PLATFORM CONFIGURATION" title="Settings" desc="Configure MarketGrid platform preferences and security."/>
+      <Header eyebrow="PLATFORM CONFIGURATION" title="Settings" desc="Review the current MarketGrid configuration."/>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px"}}>
         <div style={settingsCard}>
           <Settings size={24} color="#2864e6"/>
           <h2>Platform Settings</h2>
-          <p>General marketplace configuration.</p>
-
-          <label>Platform Name<input defaultValue="MarketGrid"/></label>
-          <label>Support Email<input defaultValue="support@marketgrid.com"/></label>
-          <label>Currency<input defaultValue="INR (₹)"/></label>
+          <p>These values are display-only until a settings API is implemented.</p>
+          <label>Platform Name<input defaultValue="MarketGrid" readOnly/></label>
+          <label>Support Email<input defaultValue="support@marketgrid.com" readOnly/></label>
+          <label>Currency<input defaultValue="INR (₹)" readOnly/></label>
         </div>
-
         <div style={settingsCard}>
           <ShieldCheck size={24} color="#2864e6"/>
-          <h2>Security</h2>
-          <p>Authentication and access configuration.</p>
-
+          <h2>Security Configuration</h2>
+          <p>Expected controls enforced by backend services.</p>
           <Toggle text="JWT Authentication" checked/>
           <Toggle text="Role Based Authorization" checked/>
           <Toggle text="Tenant Isolation" checked/>
           <Toggle text="Secure API Gateway" checked/>
+          <p style={{color:"#75839a",fontSize:12,marginTop:14}}>This screen does not perform a live security health check.</p>
         </div>
       </div>
-
-      <button style={{...primary,marginTop:"20px"}} onClick={()=>setSaved(true)}>
-        {saved?<><CheckCircle2 size={17}/> Settings Saved</>:<>Save Changes</>}
-      </button>
+      <div role="status" style={{...tableCard,padding:14,marginTop:20,color:"#75839a"}}>
+        No platform settings update endpoint exists yet. Changes are not saved by this screen.
+      </div>
     </div>
   );
 }

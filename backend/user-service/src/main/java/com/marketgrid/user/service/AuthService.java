@@ -7,10 +7,11 @@ import com.marketgrid.user.entity.User;
 import com.marketgrid.user.repository.UserRepository;
 import com.marketgrid.user.security.JwtUtil;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -34,78 +35,91 @@ public class AuthService {
     }
 
     public User register(RegisterRequest request) {
-        if (request.getTenantSlug() == null
-                || request.getTenantSlug().isBlank()) {
-            throw new RuntimeException("Store slug is required");
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Registration details are required");
         }
 
-        if (request.getFullName() == null || request.getFullName().isBlank()
-                || request.getEmail() == null || request.getEmail().isBlank()
-                || request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new RuntimeException(
-                    "Full name, email and password are required");
+        // Public self-registration is deliberately limited to customers.
+        // Vendor/admin accounts must be created through protected onboarding.
+        if (request.getRole() != null && !"CUSTOMER".equalsIgnoreCase(request.getRole().trim())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Self-registration is available for customer accounts only"
+            );
         }
 
-        TenantLookupResponse tenant =
-                lookupActiveTenant(request.getTenantSlug().trim());
+        String fullName = request.getFullName() == null ? "" : request.getFullName().trim();
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        String password = request.getPassword();
 
-        String email = request.getEmail().trim();
-
-        if (userRepository.findByEmailAndTenantId(
-                email, tenant.getId()).isPresent()) {
-            throw new RuntimeException(
-                    "User already exists for this tenant");
+        if (fullName.length() < 2 || fullName.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Full name must be between 2 and 120 characters");
         }
-
+        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
+        }
+        if (password == null || password.length() < 8 || password.length() > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain 8 to 72 characters");
+        }
         User user = new User();
-        user.setTenantId(tenant.getId());
-        user.setFullName(request.getFullName().trim());
+        user.setFullName(fullName);
         user.setEmail(email);
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole("CUSTOMER");
+        user.setPassword(passwordEncoder.encode(password));
         user.setActive(true);
+
+        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()) {
+            // A standalone account can apply for a store before any tenant exists.
+            // It receives no tenant privileges until Super Admin approval.
+            if (userRepository.findByEmail(email).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An account with this email already exists");
+            }
+            user.setTenantId(null);
+            user.setRole("TENANT_APPLICANT");
+        } else {
+            TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
+            if (userRepository.findByEmailAndTenantId(email, tenant.getId()).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An account with this email already exists in this store");
+            }
+            user.setTenantId(tenant.getId());
+            user.setRole("CUSTOMER");
+        }
 
         return userRepository.save(user);
     }
 
     public LoginResponse login(LoginRequest request) {
-        if (request.getEmail() == null || request.getEmail().isBlank()
+        if (request == null || request.getEmail() == null || request.getEmail().isBlank()
                 || request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new RuntimeException("Email and password are required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email and password are required");
         }
 
-        String email = request.getEmail().trim();
+        String email = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
         User user;
 
-        if (request.getTenantSlug() != null
-                && !request.getTenantSlug().isBlank()) {
-            TenantLookupResponse tenant =
-                    lookupActiveTenant(request.getTenantSlug().trim());
-
-            user = userRepository.findByEmailAndTenantId(
-                    email, tenant.getId())
-                    .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Invalid email, password or tenant"));
+        if (request.getTenantSlug() != null && !request.getTenantSlug().isBlank()) {
+            TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
+            user = userRepository.findByEmailAndTenantId(email, tenant.getId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED, "Invalid email, password or store"));
         } else if (request.getTenantId() != null) {
-            user = userRepository.findByEmailAndTenantId(
-                    email, request.getTenantId())
-                    .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Invalid email, password or tenant"));
+            user = userRepository.findByEmailAndTenantId(email, request.getTenantId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED, "Invalid email, password or store"));
         } else {
+            // Login without a store slug: email identifies the account.
+            // The JWT still carries tenantId, so tenant-scoped authorization remains in force.
             user = userRepository.findByEmail(email)
-                    .filter(u -> "SUPER_ADMIN".equals(u.getRole()))
-                    .orElseThrow(() ->
-                            new RuntimeException("Invalid email or password"));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED, "Invalid email or password"));
         }
 
         if (!user.isActive()) {
-            throw new RuntimeException("User account is inactive");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User account is inactive");
         }
-
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid email or password");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         String token = jwtUtil.generateToken(
@@ -124,19 +138,20 @@ public class AuthService {
                     slug);
 
             if (tenant == null || tenant.getId() == null || !tenant.isActive()) {
-                throw new RuntimeException("Store not found or inactive");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Store not found or inactive");
             }
-
             return tenant;
-        } catch (org.springframework.web.client.HttpClientErrorException ex) {
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (org.springframework.web.client.RestClientResponseException ex) {
             if (ex.getStatusCode().value() == 404) {
-                throw new RuntimeException("Store not found or inactive");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Store not found or inactive");
             }
-            throw new RuntimeException(
-                    "Unable to verify store. Please try again later");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Unable to verify store. Please try again later");
         } catch (RestClientException ex) {
-            throw new RuntimeException(
-                    "Tenant Service is unavailable. Please try again later");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Tenant Service is unavailable. Please try again later");
         }
     }
 

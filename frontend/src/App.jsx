@@ -1,11 +1,12 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw, UserRound, Store as StoreIcon, Building2
 } from "lucide-react";
 import "./index.css";
+import { api } from "./services/api";
 import VendorDashboard from "./pages/VendorDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
@@ -15,8 +16,8 @@ import AdminUsers from "./pages/AdminUsers";
 import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
 import VendorOrders from "./pages/VendorOrders";
+import TenantApplicantDashboard from "./pages/TenantApplicantDashboard";
 
-const API = "http://localhost:8080";
 function getStoredCart() {
   try {
     return JSON.parse(localStorage.getItem("marketgrid_cart") || "[]");
@@ -66,23 +67,6 @@ function formatDisplayName(email) {
     .join(" ");
 }
 
-const demoProducts = [
-  { id: 1, name: "Gaming Laptop", vendor: "Tech Store", price: 65000, stock: 10, status: "Available" },
-  { id: 2, name: "Mechanical Keyboard", vendor: "Gear Hub", price: 2500, stock: 25, status: "Available" },
-  { id: 3, name: "Wireless Mouse", vendor: "Tech Store", price: 1200, stock: 40, status: "Available" }
-];
-
-const demoVendors = [
-  { id: 1, name: "Tech Store", email: "vendor1@test.com", status: "ACTIVE", products: 2 },
-  { id: 2, name: "Gear Hub", email: "vendor2@test.com", status: "ACTIVE", products: 1 }
-];
-
-const demoOrders = [
-  { id: 101, customer: "Rahul", total: 67500, status: "PLACED", vendors: 2 },
-  { id: 102, customer: "Priya", total: 2500, status: "SHIPPED", vendors: 1 },
-  { id: 103, customer: "Arjun", total: 1200, status: "DELIVERED", vendors: 1 }
-];
-
 function useAuth() {
   const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
@@ -90,13 +74,44 @@ function useAuth() {
   return { token, role, tenantId };
 }
 
+function clearAuthSession() {
+  [
+    "marketgrid_token",
+    "marketgrid_role",
+    "marketgrid_user_id",
+    "marketgrid_customer_id",
+    "marketgrid_tenant",
+    "marketgrid_email",
+    "marketgrid_pending_checkout"
+  ].forEach(key => localStorage.removeItem(key));
+  saveCart([]);
+}
+
+function homeForRole(role) {
+  return ({
+    SUPER_ADMIN: "/admin",
+    TENANT_ADMIN: "/tenant",
+    TENANT_APPLICANT: "/tenant-applicant",
+    VENDOR: "/vendor",
+    CUSTOMER: "/shop"
+  })[role] || "/login";
+}
+
+function RequireRole({ allowedRoles, children }) {
+  const { token, role } = useAuth();
+  if (!token || !role) return <Navigate to="/login" replace />;
+  if (!allowedRoles.includes(role)) return <Navigate to={homeForRole(role)} replace />;
+  return children;
+}
+
+
 function Header({ onMenu }) {
   const { role } = useAuth();
   const navigate = useNavigate();
 
   function logout() {
-    localStorage.clear();
-    navigate("/login");
+    clearAuthSession();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -199,7 +214,7 @@ function Sidebar({ role, open, onClose }) {
       ))}
 
       <div className="sidebar-bottom">
-        <button className="side-link" onClick={() => { localStorage.clear(); location.href="/login"; }}>
+        <button className="side-link" onClick={() => { clearAuthSession(); location.href="/login"; }}>
           <LogOut size={18}/> <span>Sign out</span>
         </button>
       </div>
@@ -243,160 +258,94 @@ function PageHead({ eyebrow, title, description, action }) {
 
 function Login() {
   const navigate = useNavigate();
-  const [loginRole, setLoginRole] = useState("CUSTOMER");
+  const [accountType, setAccountType] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(event) {
+    event.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-      const response = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
-        })
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `Login failed (HTTP ${response.status})`
-        );
+      const payload = { email: email.trim().toLowerCase(), password };
+      const data = await api.login(payload);
+      if (!data?.token || !data?.role) {
+        throw new Error("Login response is missing the token or account role.");
       }
-
+      if (data.role !== accountType && !(accountType === "TENANT_ADMIN" && data.role === "TENANT_APPLICANT")) {
+        throw new Error("This account does not match the selected account type.");
+      }
+      const homes = {
+        SUPER_ADMIN: "/admin", TENANT_ADMIN: "/tenant",
+        TENANT_APPLICANT: "/tenant-applicant", VENDOR: "/vendor", CUSTOMER: "/shop"
+      };
+      if (!homes[data.role]) throw new Error("Unsupported account role. Contact your administrator.");
       localStorage.setItem("marketgrid_token", data.token);
       localStorage.setItem("marketgrid_role", data.role);
-      localStorage.setItem("marketgrid_user_id", data.userId);
-      localStorage.setItem("marketgrid_customer_id", data.userId);
-      localStorage.setItem("marketgrid_tenant", data.tenantId);
-
-      if (data.role === "SUPER_ADMIN") navigate("/admin");
-      else if (data.role === "TENANT_ADMIN") navigate("/tenant");
-      else if (data.role === "VENDOR") navigate("/vendor");
-      else navigate("/customer");
-
+      localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_customer_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+      localStorage.setItem("marketgrid_email", data.email || email.trim().toLowerCase());
+      navigate(homes[data.role], { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to sign in. Check your details and try again.");
     } finally {
       setLoading(false);
     }
   }
-  const roles = [
-    ["CUSTOMER", "\u{1F464}", "Customer"],
-    ["VENDOR", "\u{1F3EA}", "Vendor"],
-    ["TENANT_ADMIN", "\u{1F6E1}\u{FE0F}", "Tenant Admin"],
-    ["SUPER_ADMIN", "\u{1F451}", "Super Admin"]
-  ];
-  const selectedRole =
-    roles.find(r => r[0] === loginRole)?.[2] || "Customer";
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-
         <div className="auth-brand">
           <div className="brand-mark">M</div>
-          <div>
-            <strong>MarketGrid</strong>
-            <span>Marketplace Platform</span>
-          </div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
         </div>
-
         <h1>Welcome back</h1>
-        <p className="muted">
-          Sign in to continue to your workspace.
-        </p>
+        <p className="muted">Sign in to continue to your workspace.</p>
 
-        <div className="login-role-grid">
-          {roles.map(([value, icon, label]) => (
-            <button
-              type="button"
-              key={value}
-              className={
-                loginRole === value
-                  ? "login-role active"
-                  : "login-role"
-              }
-              onClick={() => setLoginRole(value)}
-            >
-              <span>{icon}</span>
-              <small>{label}</small>
-            </button>
-          ))}
+        <div className="login-role-switch" role="group" aria-label="Choose account type">
+          <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+            onClick={() => { setAccountType("CUSTOMER"); setError(""); }}>
+            <span className="login-role-icon">♙</span><span>Customer</span>
+          </button>
+          <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+            onClick={() => { setAccountType("VENDOR"); setError(""); }}>
+            <span className="login-role-icon">▣</span><span>Vendor</span>
+          </button>
+          <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">⬡</span><span>Tenant Admin</span>
+          </button>
+          <button type="button" className={accountType === "SUPER_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("SUPER_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">♛</span><span>Super Admin</span>
+          </button>
         </div>
 
         <form onSubmit={submit} className="auth-form">
-
           <label>
             Email
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-            />
+            <input type="email" autoComplete="username" value={email}
+              onChange={event => setEmail(event.target.value)}
+              placeholder="you@example.com" required />
           </label>
-
-          {loginRole !== "SUPER_ADMIN" && (
-            <label>
-              Store Slug
-              <input
-                type="text"
-                value={tenantSlug}
-                onChange={e => setTenantSlug(e.target.value)}
-                placeholder="e.g. marketgrid-test-20261024"
-                required
-              />
-            </label>
-          )}
-
           <label>
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              required
-            />
+            <input type="password" autoComplete="current-password" value={password}
+              onChange={event => setPassword(event.target.value)}
+              placeholder="Enter your password" required />
           </label>
-
-          {error && (
-            <div className="info-box">
-              {error}
-            </div>
-          )}
-
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Signing in..."
-              : `Sign In as ${selectedRole}`}
+          {error && <div className="error-box" role="alert">{error}</div>}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
           </button>
-
         </form>
-
         <p className="auth-footer">
-          Don't have an account?{" "}
-          <Link to="/register">Register</Link>
+          New to MarketGrid? <Link to="/register">Create an account</Link>
         </p>
-
       </div>
     </div>
   );
@@ -404,50 +353,159 @@ function Login() {
 
 function Register() {
   const navigate = useNavigate();
-  const [role, setRole] = useState("CUSTOMER");
+  const [accountType, setAccountType] = useState("CUSTOMER");
   const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    tenantSlug: ""
+    fullName: "", email: "", password: "", confirmPassword: "", tenantSlug: "",
+    storeName: "", domainSlug: "", businessName: ""
   });
+  const [domains, setDomains] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function updateField(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  useEffect(() => {
+    let active = true;
+    async function loadOptions() {
+      setLoadingOptions(true);
+      setOptionsError("");
+      const [domainResult, tenantResult] = await Promise.allSettled([api.domains(), api.publicTenants()]);
+      if (!active) return;
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError("Could not load business domains: " + (domainResult.reason?.message || "API request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError(previous => [previous, "Could not load stores: " + (tenantResult.reason?.message || "API request failed")].filter(Boolean).join(" "));
+      }
+      setLoadingOptions(false);
+    }
+    loadOptions();
+    return () => { active = false; };
+  }, []);
+
+  function updateField(event) {
+    setForm(previous => ({ ...previous, [event.target.name]: event.target.value }));
   }
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(event) {
+    event.preventDefault();
     setMessage("");
+    setError("");
+    if (form.fullName.trim().length < 2) {
+      setError("Enter your full name (at least 2 characters)."); return;
+    }
+    if (form.password.length < 8 || form.password.length > 72) {
+      setError("Password must contain between 8 and 72 characters."); return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Password and confirm password do not match."); return;
+    }
+    if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.domainSlug)) {
+      setError("Enter the store name and select an available business domain."); return;
+    }
+    if (accountType === "VENDOR" && (!form.tenantSlug || !form.businessName.trim())) {
+      setError("Select the store you want to join and enter your business name."); return;
+    }
+
     setLoading(true);
-
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
+      if (accountType === "CUSTOMER") {
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+          tenantSlug: form.tenantSlug.trim()
+        });
+        setMessage("Customer account created. You can now sign in.");
+        window.setTimeout(() => navigate("/login", { replace: true }), 900);
+      } else if (accountType === "TENANT_ADMIN") {
+        // Step 1: create a standalone account with no tenant privileges.
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        });
+        // Step 2: sign in with that same account before submitting the store application.
+        const session = await api.login({
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        });
+        localStorage.setItem("marketgrid_token", session.token);
+        localStorage.setItem("marketgrid_role", session.role);
+        localStorage.setItem("marketgrid_user_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_customer_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_tenant", String(session.tenantId ?? ""));
+        localStorage.setItem("marketgrid_email", session.email || form.email.trim().toLowerCase());
+        try {
+          await api.submitTenantApplication({
+            applicantName: form.fullName.trim(),
+            storeName: form.storeName.trim(),
+            requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+            requestedDomainSlug: form.domainSlug
+          });
+          navigate("/tenant-applicant", { replace: true });
+        } catch (applicationError) {
+          setError("Your account was created and signed in, but the application could not be submitted: " +
+            (applicationError.message || "Please submit it from your applicant dashboard."));
+          navigate("/tenant-applicant", { replace: true });
+        }
+      } else {
+        await api.submitVendorApplication({
+          applicantName: form.fullName.trim(),
+          applicantEmail: form.email.trim().toLowerCase(),
+          tenantSlug: form.tenantSlug,
+          businessName: form.businessName.trim(),
+          password: form.password
+        });
+        setMessage("Vendor application submitted. Your selected store administrator must review your request.");
       }
-
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
-
-      setTimeout(() => navigate("/login"), 1200);
-
-    } catch (error) {
-      setMessage(error.message);
+    } catch (err) {
+      setError(err.message || "Registration could not be completed. Please check your details.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Treat a domain as available only when the API confirms it is unallocated.
+  // The allocatedTenantId fallback supports older API responses that omit "available".
+  const availableDomains = domains.filter(domain =>
+    domain.available === true ||
+    (domain.available == null && domain.allocatedTenantId == null)
+  );
+  const activeTenants = tenants.filter(tenant => tenant.active);
+
+  async function refreshRegistrationOptions() {
+    setLoadingOptions(true);
+    setOptionsError("");
+    try {
+      const [domainResult, tenantResult] = await Promise.allSettled([
+        api.domains(),
+        api.publicTenants()
+      ]);
+      const errors = [];
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Business domains: " + (domainResult.reason?.message || "request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Active stores: " + (tenantResult.reason?.message || "request failed"));
+      }
+      setOptionsError(errors.join(". "));
+    } finally {
+      setLoadingOptions(false);
     }
   }
 
@@ -456,157 +514,194 @@ function Register() {
       <div className="auth-card">
         <div className="auth-brand">
           <div className="brand-mark">M</div>
-          <div>
-            <strong>MarketGrid</strong>
-            <span>Marketplace Platform</span>
-          </div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
         </div>
 
         <h1>Create your account</h1>
-        <p className="muted">
-          Join MarketGrid as a customer or vendor.
-        </p>
-
-        <div className="role-switch">
-          <button
-            type="button"
-            className={role === "CUSTOMER" ? "active" : ""}
-            onClick={() => setRole("CUSTOMER")}
-          >
-            Customer
-          </button>
-
-          <button
-            type="button"
-            className={role === "VENDOR" ? "active" : ""}
-            onClick={() => setRole("VENDOR")}
-          >
-            Vendor
-          </button>
-        </div>
+        <p className="muted">Choose how you want to join MarketGrid.</p>
 
         <form onSubmit={submit} className="auth-form">
+          <div className="register-role-switch" role="group" aria-label="Choose account type">
+            <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+              aria-pressed={accountType === "CUSTOMER"}
+              onClick={() => { setAccountType("CUSTOMER"); setError(""); setMessage(""); }}>
+              <UserRound className="register-role-icon" size={23}/><span>Customer</span>
+            </button>
+            <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+              aria-pressed={accountType === "VENDOR"}
+              onClick={() => { setAccountType("VENDOR"); setError(""); setMessage(""); }}>
+              <StoreIcon className="register-role-icon" size={23}/><span>Vendor</span>
+            </button>
+            <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+              aria-pressed={accountType === "TENANT_ADMIN"}
+              onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); setMessage(""); }}>
+              <Building2 className="register-role-icon" size={23}/><span>Tenant</span>
+            </button>
+          </div>
+
           <label>
             Full Name
-            <input
-              name="fullName"
-              value={form.fullName}
-              onChange={updateField}
-              placeholder="Enter your full name"
-              required
-            />
+            <input name="fullName" value={form.fullName} onChange={updateField}
+              autoComplete="name" placeholder="Enter your full name" minLength="2" required />
           </label>
 
           <label>
             Email
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={updateField}
-              placeholder="you@example.com"
-              required
-            />
-          </label>
-          <label>
-            Store Slug
-            <input
-              name="tenantSlug"
-              value={form.tenantSlug}
-              onChange={updateField}
-              placeholder="e.g. marketgrid-test-20261024"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={updateField}
-              placeholder="Create a password"
-              required
-              minLength="6"
-            />
+            <input type="email" name="email" value={form.email} onChange={updateField}
+              autoComplete="email" placeholder="you@example.com" required />
           </label>
 
-          {role === "VENDOR" && (
-            <div className="info-box">
-              Vendor accounts can manage products and inventory after
-              approval by the tenant administrator.
-            </div>
-          )}
+          {accountType === "CUSTOMER" && <>
+            <label>
+              Store
+              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading stores..." : "Select a store"}</option>
+                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>)}
+              </select>
+            </label>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
+            </label>
+          </>}
 
-          {message && (
-            <div className="info-box">
-              {message}
-            </div>
-          )}
+          {accountType !== "CUSTOMER" && <>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
+            </label>
+          </>}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Creating account..." : `Create ${role === "VENDOR" ? "Vendor" : "Customer"} Account`}
+          {accountType === "VENDOR" && <>
+            <label>
+              Store you want to join
+              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading stores..." : "Select an active store"}</option>
+                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name}</option>)}
+              </select>
+            </label>
+            <label>
+              Business Name
+              <input name="businessName" value={form.businessName} onChange={updateField}
+                placeholder="Your shop or business name" required />
+            </label>
+            <p className="muted">Vendor access is not created immediately. The store administrator must review your application.</p>
+          </>}
+
+          {accountType === "TENANT_ADMIN" && <>
+            <label>
+              Store Name
+              <input name="storeName" value={form.storeName} onChange={updateField}
+                placeholder="Name of your store" required />
+            </label>
+            <label>
+              Business Domain
+              <select name="domainSlug" value={form.domainSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading domains..." : availableDomains.length ? "Select an available domain" : "No available domains"}</option>
+                {availableDomains.map(domain => <option key={domain.id} value={domain.slug}>{domain.name}</option>)}
+              </select>
+              {!loadingOptions && optionsError && (
+                <small className="auth-inline-error">
+                  {optionsError}. Check that Tenant Service and API Gateway are running.
+                </small>
+              )}
+              {!loadingOptions && !optionsError && availableDomains.length === 0 && (
+                <small>No available domains yet. Super Admin must create a domain in Admin → Tenants.</small>
+              )}
+              {!loadingOptions && availableDomains.length > 0 && (
+                <small>{availableDomains.length} domain(s) available to request.</small>
+              )}
+              <button
+                type="button"
+                className="auth-text-button"
+                onClick={refreshRegistrationOptions}
+                disabled={loadingOptions}
+              >
+                {loadingOptions ? "Checking availability..." : "Refresh available domains"}
+              </button>
+            </label>
+            <p className="muted">Your store will be created only after Super Admin approval.</p>
+          </>}
+
+          {error && <div className="error-box" role="alert">{error}</div>}
+          {message && <div className="info-box" role="status">{message}</div>}
+
+          <button className="primary-btn full" type="submit" disabled={loading || loadingOptions}>
+            {loading ? "Submitting..." : accountType === "CUSTOMER" ? "Create Customer Account" :
+              accountType === "VENDOR" ? "Submit Vendor Application" : "Submit Store Application"}
           </button>
         </form>
 
         <p className="auth-footer">
-          Already have an account?{" "}
-          <Link to="/login">Sign in</Link>
+          Platform Super Admin accounts are provisioned securely and cannot be created through public registration.
         </p>
+        <p className="auth-footer">Already registered? <Link to="/login">Sign in</Link></p>
       </div>
     </div>
   );
 }
+
 function CustomerDashboard() {
   const { role } = useAuth();
   const navigate = useNavigate();
   const cartCount = useCartCount();
 
-  if (role !== "CUSTOMER") {
-    return <Navigate to="/login" replace />;
-  }
-
   const email = localStorage.getItem("marketgrid_email") || "";
   const customerName = formatDisplayName(email);
 
-  const products = [
-    {
-      id: 1,
-      name: "Gaming Laptop",
-      vendor: "Tech Store",
-      price: 65000,
-      stock: 10,
-      image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 2,
-      name: "Mechanical Keyboard",
-      vendor: "Gear Hub",
-      price: 2500,
-      stock: 18,
-      image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 3,
-      name: "Wireless Mouse",
-      vendor: "Tech Store",
-      price: 1200,
-      stock: 25,
-      image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 4,
-      name: "Smart Watch",
-      vendor: "DigitalMart",
-      price: 4500,
-      stock: 12,
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+  const [products, setProducts] = useState([]);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadRecommendations() {
+      try {
+        const [catalog, vendors, orders] = await Promise.all([api.products(), api.vendors(), api.orders()]);
+        const vendorNames = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const items = (Array.isArray(catalog) ? catalog : [])
+          .filter(product => String(product.status || "ACTIVE").toUpperCase() === "ACTIVE")
+          .slice(0, 4)
+          .map(product => ({
+            id: product.id,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorNames.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            vendorId: product.vendorId,
+            price: Number(product.price || 0),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) {
+          setProducts(items);
+          setCustomerOrders(Array.isArray(orders) ? orders : []);
+        }
+      } catch (error) {
+        if (active) setCatalogError(error.message || "Could not load recommended products.");
+      } finally {
+        if (active) setCatalogLoading(false);
+      }
     }
-  ];
+    loadRecommendations();
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="content">
@@ -683,10 +778,10 @@ function CustomerDashboard() {
       >
 
         {[
-          [Package, "Orders", "0", "View your purchases"],
+          [Package, "Orders", catalogLoading ? "—" : customerOrders.length, "View your purchases"],
           [ShoppingCart, "Cart Items", cartCount, "Items waiting for checkout"],
-          [Eye, "Wishlist", "0", "Saved products"],
-          [Truck, "Saved Addresses", "0", "Manage delivery addresses"]
+          [Eye, "Wishlist", "Coming soon", "Wishlist module not connected"],
+          [Truck, "Saved Addresses", "Coming soon", "Address book module not connected"]
         ].map(([Icon, label, value, note]) => (
 
           <div
@@ -866,6 +961,9 @@ function CustomerDashboard() {
             }}
           >
 
+            {catalogLoading && <p>Loading products from this store...</p>}
+            {catalogError && <p className="error-box" role="alert">{catalogError}</p>}
+            {!catalogLoading && !catalogError && products.length === 0 && <p>No active products are available in this store yet.</p>}
             {products.map(product => (
 
               <div
@@ -1133,91 +1231,54 @@ function CustomerShop() {
   const cartCount = useCartCount();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState([
-    {
-      id: 1,
-      name: "Gaming Laptop",
-      vendor: "Tech Store",
-      price: 65000,
-      stock: 10,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 2,
-      name: "Mechanical Keyboard",
-      vendor: "Gear Hub",
-      price: 2500,
-      stock: 25,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 3,
-      name: "Wireless Mouse",
-      vendor: "Tech Store",
-      price: 1200,
-      stock: 40,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 4,
-      name: "Smart Watch",
-      vendor: "DigitalMart",
-      price: 4500,
-      stock: 12,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 5,
-      name: "Wireless Headphones",
-      vendor: "AudioHub",
-      price: 3500,
-      stock: 18,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 6,
-      name: "Smartphone",
-      vendor: "Mobile World",
-      price: 28000,
-      stock: 15,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 7,
-      name: "Digital Camera",
-      vendor: "PhotoPro",
-      price: 42000,
-      stock: 8,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 8,
-      name: "Bluetooth Speaker",
-      vendor: "SoundMax",
-      price: 3200,
-      stock: 22,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 9,
-      name: "Tablet",
-      vendor: "Smart World",
-      price: 18000,
-      stock: 14,
-      status: "Available",
-      image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=800&q=80"
-    }
-  ]);
-
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
   const [addedId, setAddedId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCatalog() {
+      setProductsLoading(true);
+      setProductsError("");
+      try {
+        const [catalog, vendors] = await Promise.all([
+          api.products(),
+          api.vendors()
+        ]);
+        const vendorById = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const liveProducts = (Array.isArray(catalog) ? catalog : [])
+          .filter(product =>
+            String(product.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          )
+          .map(product => ({
+            id: product.id,
+            vendorId: product.vendorId,
+            tenantId: product.tenantId,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorById.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            price: Number(product.price),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            status: product.status || "ACTIVE",
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) setProducts(liveProducts);
+      } catch (error) {
+        if (active) setProductsError(error.message || "Could not load products from the marketplace.");
+      } finally {
+        if (active) setProductsLoading(false);
+      }
+    }
+
+    loadCatalog();
+    return () => { active = false; };
+  }, []);
 
   function addToCart(product) {
     if (product.stock <= 0) return;
@@ -1230,8 +1291,7 @@ function CustomerShop() {
     } else {
       cart.push({
         ...product,
-        quantity: 1,
-        vendorId: product.vendorId || product.id
+        quantity: 1
       });
     }
 
@@ -1281,6 +1341,16 @@ function CustomerShop() {
         <button className="filter">Sort: Popular</button>
 
       </div>
+
+      {productsLoading && <div className="empty-card">Loading products from this store...</div>}
+      {productsError && <div className="info-box">{productsError}</div>}
+      {!productsLoading && !productsError && products.length === 0 && (
+        <div className="empty-card">
+          <Package size={36}/>
+          <h2>No active products yet</h2>
+          <p>This tenant does not currently have products available for sale.</p>
+        </div>
+      )}
 
       <div className="product-grid">
 
@@ -1672,47 +1742,115 @@ function Checkout() {
     setForm(prev => ({ ...prev, [name]: value }));
   }
 
-  function placeOrder() {
+  const [checkoutError, setCheckoutError] = useState("");
+  const [orderId, setOrderId] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState("SUCCESS");
+  const [orderTotal, setOrderTotal] = useState(null);
+
+  async function placeOrder() {
+    setCheckoutError("");
+
     if (
-      !form.fullName ||
-      !form.phone ||
-      !form.address ||
-      !form.city ||
-      !form.pincode
+      !form.fullName.trim() ||
+      !form.phone.trim() ||
+      !/^\d{10}$/.test(form.phone.trim()) ||
+      !form.address.trim() ||
+      !form.city.trim() ||
+      !/^\d{6}$/.test(form.pincode.trim())
     ) {
-      alert("Please complete all delivery information.");
+      setCheckoutError("Enter your name, a valid 10-digit phone number, address, city, and 6-digit pincode.");
       return;
     }
 
     if (cart.length === 0) {
-      alert("Your cart is empty.");
+      setCheckoutError("Your cart is empty.");
       navigate("/shop/products");
       return;
     }
 
+    if (!localStorage.getItem("marketgrid_token")) {
+      setCheckoutError("Please sign in before placing an order.");
+      navigate("/login");
+      return;
+    }
+
     setProcessing(true);
+    try {
+      const tenantId = localStorage.getItem("marketgrid_tenant");
+      const customerId = localStorage.getItem("marketgrid_user_id");
+      const storedPending = JSON.parse(
+        localStorage.getItem("marketgrid_pending_checkout") || "null"
+      );
+      let order = null;
 
-    setTimeout(() => {
-      const txn = "TXN-DEMO-" + Date.now();
+      if (
+        storedPending?.orderId &&
+        String(storedPending.tenantId) === String(tenantId) &&
+        String(storedPending.customerId) === String(customerId)
+      ) {
+        order = await api.order(storedPending.orderId);
+      } else {
+        order = await api.createOrder({
+          deliveryName: form.fullName.trim(),
+          deliveryPhone: form.phone.trim(),
+          deliveryAddress: form.address.trim(),
+          deliveryCity: form.city.trim(),
+          deliveryPincode: form.pincode.trim(),
+          items: cart.map(item => ({
+            productId: Number(item.id),
+            vendorId: Number(item.vendorId),
+            quantity: Number(item.quantity || 1)
+          }))
+        });
+        if (!order?.id) {
+          throw new Error("The order service did not return an order ID.");
+        }
+        localStorage.setItem("marketgrid_pending_checkout", JSON.stringify({
+          orderId: order.id,
+          tenantId,
+          customerId
+        }));
+      }
 
-      setTransactionId(txn);
+      setOrderId(order.id);
+      setOrderTotal(Number(order.totalAmount ?? total));
+      const payment = await api.createPayment({
+        orderId: order.id,
+        paymentMethod
+      });
+
+      const status = String(payment?.paymentStatus || "").toUpperCase();
+      if (!["SUCCESS", "PENDING"].includes(status)) {
+        throw new Error("The payment service returned an unexpected payment status.");
+      }
+
+      const confirmedMethod = payment.paymentMethod || paymentMethod;
+      setPaymentStatus(status);
+      setPaymentMethod(confirmedMethod);
+      setTransactionId(payment.transactionId || "Payment due on delivery");
       setProcessing(false);
       setSuccess(true);
 
-      localStorage.setItem(
-        "marketgrid_last_order",
-        JSON.stringify({
-          items: cart,
-          total,
-          paymentMethod,
-          transactionId: txn,
-          delivery: form,
-          createdAt: new Date().toISOString()
-        })
-      );
-
+      localStorage.setItem("marketgrid_last_order", JSON.stringify({
+        orderId: order.id,
+        items: cart,
+        total: Number(order.totalAmount ?? total),
+        paymentMethod: payment.paymentMethod || paymentMethod,
+        paymentStatus: status,
+        transactionId: payment.transactionId || null,
+        delivery: form,
+        createdAt: new Date().toISOString()
+      }));
+      localStorage.removeItem("marketgrid_pending_checkout");
       saveCart([]);
-    }, 1200);
+    } catch (error) {
+      setCheckoutError(
+        error.message ||
+        "Could not complete checkout. Your cart has been kept so you can retry."
+      );
+    } finally {
+      setProcessing(false);
+    }
   }
 
   if (success) {
@@ -1728,17 +1866,18 @@ function Checkout() {
             ORDER CONFIRMED
           </span>
 
-          <h1>Payment Successful</h1>
+          <h1>{paymentStatus === "PENDING" ? "Order Confirmed — Pay on Delivery" : "Payment Successful"}</h1>
 
           <p>
-            Your order has been placed successfully.
-            We have recorded your payment and delivery information.
+            {paymentStatus === "PENDING"
+              ? "Your order has been placed. Payment is due when the order arrives."
+              : "Your order has been placed and the demo payment has been recorded."}
           </p>
 
           <div className="success-details">
             <div>
-              <span>Transaction ID</span>
-              <strong>{transactionId}</strong>
+              <span>Order ID / Transaction</span>
+              <strong>{orderId} / {transactionId}</strong>
             </div>
 
             <div>
@@ -1749,7 +1888,7 @@ function Checkout() {
             <div>
               <span>Amount Paid</span>
               <strong>
-                {formatINR(total)}
+                {formatINR(orderTotal ?? total)}
               </strong>
             </div>
           </div>
@@ -2058,6 +2197,12 @@ function Checkout() {
             <strong>{formatINR(total)}</strong>
           </div>
 
+          {checkoutError && (
+            <div className="info-box" role="alert" style={{ marginBottom: "12px" }}>
+              {checkoutError}
+            </div>
+          )}
+
           <button
             className="checkout-place-btn"
             onClick={placeOrder}
@@ -2080,16 +2225,44 @@ function Checkout() {
 }
 
 function Vendors() {
+  const [vendors,setVendors]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);setError("");
+      try{
+        const [vendorData,productData]=await Promise.all([api.vendors(),api.products()]);
+        const products=Array.isArray(productData)?productData:[];
+        const list=(Array.isArray(vendorData)?vendorData:[]).map(v=>({
+          ...v,
+          name:v.vendorName||v.businessName||("Vendor #"+v.id),
+          products:products.filter(p=>Number(p.vendorId)===Number(v.id)).length
+        }));
+        if(active)setVendors(list);
+      }catch(e){
+        if(active)setError(e.message||"Unable to load marketplace vendors.");
+      }finally{if(active)setLoading(false);}
+    }
+    load();
+    return()=>{active=false;};
+  },[]);
+
   return (
     <div className="content">
-      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore independent sellers operating on MarketGrid."/>
+      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore vendors registered in your active store." action={<button className="secondary-btn" onClick={()=>window.location.reload()}><RefreshCw size={17}/> Refresh</button>}/>
+      {error&&<div className="error-box" role="alert">{error}</div>}
+      {loading&&<div className="empty-card">Loading vendor directory...</div>}
+      {!loading&&!error&&vendors.length===0&&<div className="empty-card"><Store size={38}/><h2>No vendors available</h2><p>This store does not currently have active vendor profiles.</p></div>}
       <div className="vendor-grid">
-        {demoVendors.map(v=>(
+        {!loading&&vendors.map(v=>(
           <div className="vendor-card" key={v.id}>
-            <div className="vendor-avatar">{v.name[0]}</div>
-            <div><h3>{v.name}</h3><p>{v.email}</p></div>
-            <span className="badge green">{v.status}</span>
-            <div className="vendor-meta"><span>{v.products} products</span><button className="secondary-btn small">View Store</button></div>
+            <div className="vendor-avatar">{String(v.name||"V").charAt(0).toUpperCase()}</div>
+            <div><h3>{v.name}</h3><p>{v.email||"Contact details unavailable"}</p></div>
+            <span className={"badge "+(String(v.status||"").toUpperCase()==="ACTIVE"?"green":"orange")}>{v.status||"UNKNOWN"}</span>
+            <div className="vendor-meta"><span>{v.products} products</span><span>{v.businessName||"Marketplace vendor"}</span></div>
           </div>
         ))}
       </div>
@@ -2102,7 +2275,6 @@ function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
   const customerId = Number(
     localStorage.getItem("marketgrid_customer_id") ||
@@ -2114,16 +2286,9 @@ function Orders() {
     setError("");
 
     try {
-      const response = await fetch(API + "/api/orders", {
-        headers: {
-          Authorization: "Bearer " + token
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to load orders");
+      const data = await api.orders();
+      if (!Array.isArray(data)) {
+        throw new Error("The Order Service returned an unexpected response.");
       }
 
       const customerOrders =
@@ -2546,23 +2711,15 @@ function OrderDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
   const customerId = Number(localStorage.getItem("marketgrid_customer_id") || localStorage.getItem("marketgrid_user_id"));
 
   useEffect(() => {
     async function loadOrder() {
       try {
-        const response = await fetch(API + "/api/orders/" + id, {
-          headers: {
-            Authorization: "Bearer " + token
-          }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Order not found");
+        const data = await api.order(id);
+        if (!data || !data.id) {
+          throw new Error("Order not found");
         }
 
         if (
@@ -2740,40 +2897,22 @@ function Dashboard({ type }) {
   const [products, setProducts] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(type === "admin");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (type !== "admin") return;
-
     let cancelled = false;
 
     async function loadDashboard() {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("marketgrid_token");
-      const headers = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
-
       try {
-        const results = await Promise.all([
-          fetch("http://localhost:8080/api/products", { headers }),
-          fetch("http://localhost:8080/api/vendors", { headers }),
-          fetch("http://localhost:8080/api/orders", { headers })
+        const [productData, vendorData, orderData] = await Promise.all([
+          api.products(),
+          api.vendors(),
+          api.orders()
         ]);
-
-        const failed = results.find(response => !response.ok);
-
-        if (failed) {
-          throw new Error(
-            `Dashboard API request failed (HTTP ${failed.status}).`
-          );
-        }
-
-        const [productData, vendorData, orderData] =
-          await Promise.all(results.map(response => response.json()));
 
         if (!Array.isArray(productData) ||
             !Array.isArray(vendorData) ||
@@ -2962,8 +3101,7 @@ function GenericPage({ title, description }) {
       <div className="empty-card">
         <BarChart3 size={44}/>
         <h2>{title}</h2>
-        <p>This module is connected to the MarketGrid interface and is ready for backend API integration.</p>
-        <div className="action-row"><button className="primary-btn"><Plus size={17}/> Create New</button><button className="secondary-btn">Refresh Data</button></div>
+        <p>This module is a placeholder. Its backend API and save actions have not been implemented yet.</p>
       </div>
     </div>
   );
@@ -2973,53 +3111,60 @@ function RoleRedirect() {
   const { role } = useAuth();
   if (role === "SUPER_ADMIN") return <Navigate to="/admin" replace/>;
   if (role === "TENANT_ADMIN") return <Navigate to="/tenant" replace/>;
+  if (role === "TENANT_APPLICANT") return <Navigate to="/tenant-applicant" replace/>;
   if (role === "VENDOR") return <Navigate to="/vendor" replace/>;
   if (role === "CUSTOMER") return <Navigate to="/shop" replace/>;
   return <Navigate to="/login" replace/>;
 }
 
 function App() {
+  const allRoles = ["SUPER_ADMIN", "TENANT_ADMIN", "VENDOR", "CUSTOMER"];
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login/>}/><Route path="/register" element={<Register/>}/>
+        <Route path="/login" element={<Login/>}/>
+        <Route path="/register" element={<Register/>}/>
         <Route path="/" element={<><Header/><Home/></>}/>
+
         <Route element={<Shell/>}>
-          <Route path="/shop" element={<CustomerDashboard/>}/>
-          <Route path="/shop/products" element={<CustomerShop/>}/>
-          <Route path="/cart" element={<Cart/>}/>
-          <Route path="/checkout" element={<Checkout/>}/>
-          <Route path="/vendors" element={<Vendors/>}/>
-          <Route path="/orders" element={<Orders/>}/><Route path="/orders/:id" element={<OrderDetails/>}/>
+          <Route path="/tenant-applicant" element={<RequireRole allowedRoles={["TENANT_APPLICANT", "TENANT_ADMIN"]}><TenantApplicantDashboard/></RequireRole>}/>
+          <Route path="/shop" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerDashboard/></RequireRole>}/>
+          <Route path="/shop/products" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerShop/></RequireRole>}/>
+          <Route path="/cart" element={<RequireRole allowedRoles={["CUSTOMER"]}><Cart/></RequireRole>}/>
+          <Route path="/checkout" element={<RequireRole allowedRoles={["CUSTOMER"]}><Checkout/></RequireRole>}/>
 
-          <Route path="/admin" element={<Dashboard type="admin"/>}/>
-          <Route path="/admin/tenants" element={<TenantsPage/>}/>
-          <Route path="/admin/users" element={<AdminUsers/>}/>
-          <Route path="/admin/vendors" element={<AdminManagement type="vendors"/>}/>
-          <Route path="/admin/products" element={<AdminManagement type="products"/>}/>
-          <Route path="/admin/orders" element={<AdminManagement type="orders"/>}/>
-          <Route path="/admin/analytics" element={<AdminManagement type="analytics"/>}/>
-          <Route path="/admin/settings" element={<AdminManagement type="settings"/>}/>
+          <Route path="/vendors" element={<RequireRole allowedRoles={allRoles}><Vendors/></RequireRole>}/>
+          <Route path="/orders" element={<RequireRole allowedRoles={allRoles}><Orders/></RequireRole>}/>
+          <Route path="/orders/:id" element={<RequireRole allowedRoles={allRoles}><OrderDetails/></RequireRole>}/>
 
-          <Route path="/tenant" element={<Dashboard type="tenant"/>}/>
-          <Route path="/tenant/products" element={<TenantManagement type="products"/>}/>
-          <Route path="/tenant/vendors" element={<TenantVendors/>}/>
-          <Route path="/tenant/inventory" element={<TenantManagement type="inventory"/>}/>
-          <Route path="/tenant/orders" element={<TenantManagement type="orders"/>}/>
-          <Route path="/tenant/settings" element={<TenantManagement type="settings"/>}/>
+          <Route path="/admin" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><Dashboard type="admin"/></RequireRole>}/>
+          <Route path="/admin/tenants" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><TenantsPage/></RequireRole>}/>
+          <Route path="/admin/users" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminUsers/></RequireRole>}/>
+          <Route path="/admin/vendors" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="vendors"/></RequireRole>}/>
+          <Route path="/admin/products" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="products"/></RequireRole>}/>
+          <Route path="/admin/orders" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="orders"/></RequireRole>}/>
+          <Route path="/admin/analytics" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="analytics"/></RequireRole>}/>
+          <Route path="/admin/settings" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="settings"/></RequireRole>}/>
 
-          <Route path="/vendor" element={<VendorDashboard/>}/>
-          <Route path="/vendor/products" element={<VendorProducts/>}/>
-          <Route path="/vendor/inventory" element={<VendorInventory/>}/>
-          <Route path="/vendor/orders" element={<VendorOrders/>}/>
-          <Route path="/vendor/settings" element={<GenericPage title="Vendor Settings" description="Manage your vendor profile."/>}/>
+          <Route path="/tenant" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><Dashboard type="tenant"/></RequireRole>}/>
+          <Route path="/tenant/products" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="products"/></RequireRole>}/>
+          <Route path="/tenant/vendors" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantVendors/></RequireRole>}/>
+          <Route path="/tenant/inventory" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="inventory"/></RequireRole>}/>
+          <Route path="/tenant/orders" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="orders"/></RequireRole>}/>
+          <Route path="/tenant/settings" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="settings"/></RequireRole>}/>
+
+          <Route path="/vendor" element={<RequireRole allowedRoles={["VENDOR"]}><VendorDashboard/></RequireRole>}/>
+          <Route path="/vendor/products" element={<RequireRole allowedRoles={["VENDOR"]}><VendorProducts/></RequireRole>}/>
+          <Route path="/vendor/inventory" element={<RequireRole allowedRoles={["VENDOR"]}><VendorInventory/></RequireRole>}/>
+          <Route path="/vendor/orders" element={<RequireRole allowedRoles={["VENDOR"]}><VendorOrders/></RequireRole>}/>
+          <Route path="/vendor/settings" element={<RequireRole allowedRoles={["VENDOR"]}><GenericPage title="Vendor Settings" description="Manage your vendor profile."/></RequireRole>}/>
         </Route>
+
         <Route path="*" element={<RoleRedirect/>}/>
       </Routes>
     </BrowserRouter>
   );
 }
-
 export default App;
 
 

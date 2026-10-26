@@ -1,0 +1,129 @@
+name: Checkout integration validation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - feature/secure-checkout-integration
+
+jobs:
+  frontend-build:
+    name: Build React frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  payment-service-tests:
+    name: Test Payment Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/payment-service/pom.xml
+      - name: Test Payment Service
+        run: mvn -B -f backend/payment-service/pom.xml test
+
+  order-service-tests:
+    name: Test Order Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/order-service/pom.xml
+      - name: Test Order Service
+        run: mvn -B -f backend/order-service/pom.xml test
+
+  user-service-tests:
+    name: Test User Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/user-service/pom.xml
+      - name: Test User Service
+        run: mvn -B -f backend/user-service/pom.xml test
+
+  tenant-service-tests:
+    name: Test Tenant Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/tenant-service/pom.xml
+      - name: Test Tenant Service
+        run: mvn -B -f backend/tenant-service/pom.xml test
+
+  vendor-service-tests:
+    name: Test Vendor Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/vendor-service/pom.xml
+      - name: Test Vendor Service
+        run: mvn -B -f backend/vendor-service/pom.xml test
+
+  product-service-tests:
+    name: Test Product Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: backend/product-service/pom.xml
+      - name: Test Product Service
+        run: mvn -B -f backend/product-service/pom.xml test

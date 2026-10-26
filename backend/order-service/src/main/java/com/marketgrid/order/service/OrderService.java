@@ -64,6 +64,10 @@ public class OrderService {
 
         for (OrderItem item : order.getItems()) {
 
+            if (item.getProductId() == null || item.getVendorId() == null) {
+                throw new RuntimeException("Product ID and vendor ID are required for every order item");
+            }
+
             if (item.getQuantity() == null
                     || item.getQuantity() <= 0) {
 
@@ -156,31 +160,26 @@ public class OrderService {
                                     vendor.id()
                             );
 
-            orders.forEach(order ->
-                    order.setItems(
-                            order.getItems()
-                                    .stream()
-                                    .filter(item ->
-                                            vendor.id().equals(
-                                                    item.getVendorId()
-                                            )
-                                    )
-                                    .toList()
-                    )
-            );
+            orders.forEach(order -> {
+                List<OrderItem> vendorItems = order.getItems().stream()
+                        .filter(item -> vendor.id().equals(item.getVendorId()))
+                        .toList();
+                order.setItems(vendorItems);
+                order.setTotalAmount(vendorItems.stream()
+                        .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+            });
 
             return orders;
         }
 
         if ("CUSTOMER".equals(role)) {
-
             Long customerId = extractUserId(authentication);
+            return orderRepository.findAllByTenantIdAndCustomerId(tenantId, customerId);
+        }
 
-            return orderRepository
-                    .findAllByTenantIdAndCustomerId(
-                            tenantId,
-                            customerId
-                    );
+        if ("SUPER_ADMIN".equals(role)) {
+            return orderRepository.findAll();
         }
 
         return orderRepository.findAllByTenantId(tenantId);
@@ -194,12 +193,10 @@ public class OrderService {
 
         String role = currentRole();
 
-        Order order = orderRepository
-                .findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Order not found"
-                        ));
+        Order order = "SUPER_ADMIN".equals(role)
+                ? orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Order not found"))
+                : orderRepository.findByIdAndTenantId(id, tenantId)
+                        .orElseThrow(() -> new RuntimeException("Order not found"));
 
         if ("CUSTOMER".equals(role)) {
 
@@ -231,16 +228,13 @@ public class OrderService {
                 );
             }
 
-            order.setItems(
-                    order.getItems()
-                            .stream()
-                            .filter(item ->
-                                    vendor.id().equals(
-                                            item.getVendorId()
-                                    )
-                            )
-                            .toList()
-            );
+            List<OrderItem> vendorItems = order.getItems().stream()
+                    .filter(item -> vendor.id().equals(item.getVendorId()))
+                    .toList();
+            order.setItems(vendorItems);
+            order.setTotalAmount(vendorItems.stream()
+                    .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
         }
 
         return order;

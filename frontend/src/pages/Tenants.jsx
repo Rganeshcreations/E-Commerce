@@ -5,6 +5,11 @@ import { api } from "../services/api";
 export default function Tenants() {
   const [tenants, setTenants] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [domains, setDomains] = useState([]);
+  const [domainName, setDomainName] = useState("");
+  const [domainSlug, setDomainSlug] = useState("");
+  const [loadingDomains, setLoadingDomains] = useState(true);
+  const [creatingDomain, setCreatingDomain] = useState(false);
   const [loadingTenants, setLoadingTenants] = useState(true);
   const [loadingApplications, setLoadingApplications] = useState(true);
   const [busyId, setBusyId] = useState(null);
@@ -104,10 +109,53 @@ export default function Tenants() {
     }
   }, []);
 
+  const loadDomains = useCallback(async () => {
+    setLoadingDomains(true);
+    try {
+      const data = await api.domains();
+      setDomains(Array.isArray(data) ? data : data?.content ?? []);
+    } catch (e) {
+      setError(e.message || "Unable to load business domains.");
+    } finally {
+      setLoadingDomains(false);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     setError("");
-    await Promise.all([loadTenants(), loadApplications()]);
-  }, [loadTenants, loadApplications]);
+    await Promise.all([loadTenants(), loadApplications(), loadDomains()]);
+  }, [loadTenants, loadApplications, loadDomains]);
+
+  function updateDomainName(value) {
+    setDomainName(value);
+    setDomainSlug(value.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, ""));
+  }
+
+  async function createDomain(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    const name = domainName.trim();
+    const slug = domainSlug.trim().toLowerCase();
+    if (!name || !slug) {
+      setError("Enter a domain name. Its slug is required too.");
+      return;
+    }
+    setCreatingDomain(true);
+    try {
+      const created = await api.createDomain({ name, slug });
+      setMessage(`Business domain "${created.name}" created successfully.`);
+      setDomainName("");
+      setDomainSlug("");
+      await loadDomains();
+    } catch (e) {
+      setError(e.message || "Unable to create business domain.");
+    } finally {
+      setCreatingDomain(false);
+    }
+  }
 
   useEffect(() => {
     refreshAll();
@@ -222,6 +270,84 @@ export default function Tenants() {
       )}
 
       <section style={styles.card}>
+        <div>
+          <h2>Business domains</h2>
+          <p style={styles.muted}>
+            Create marketplace categories such as Medicines, Vegetables, Fruits, Groceries, and Electronics.
+            Each domain can be allocated to only one tenant.
+          </p>
+        </div>
+
+        <form onSubmit={createDomain} style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+          gap: 12,
+          alignItems: "end",
+          marginTop: 16,
+          marginBottom: 20
+        }}>
+          <label>
+            Domain name
+            <input
+              style={styles.field}
+              value={domainName}
+              onChange={event => updateDomainName(event.target.value)}
+              maxLength={80}
+              placeholder="e.g. Medicines"
+              required
+            />
+          </label>
+          <label>
+            URL slug
+            <input
+              style={styles.field}
+              value={domainSlug}
+              onChange={event => setDomainSlug(event.target.value.toLowerCase())}
+              pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              maxLength={80}
+              placeholder="e.g. medicines"
+              required
+            />
+          </label>
+          <button style={styles.button} type="submit" disabled={creatingDomain}>
+            {creatingDomain ? "Creating..." : "Create domain"}
+          </button>
+        </form>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:10}}>
+          <strong>Existing domains</strong>
+          <button style={styles.secondaryButton} onClick={loadDomains} disabled={loadingDomains || creatingDomain}>
+            Refresh domains
+          </button>
+        </div>
+        {loadingDomains ? (
+          <p>Loading business domains...</p>
+        ) : domains.length === 0 ? (
+          <p style={styles.muted}>No domains created yet. Add the first domain above.</p>
+        ) : (
+          <div style={{overflowX:"auto"}}>
+            <table style={styles.table}>
+              <thead><tr>
+                {["ID", "Domain", "Slug", "Allocation status", "Allocated tenant"].map(heading =>
+                  <th key={heading} style={styles.cell}>{heading}</th>)}
+              </tr></thead>
+              <tbody>
+                {domains.map(domain => (
+                  <tr key={domain.id}>
+                    <td style={styles.cell}>{domain.id}</td>
+                    <td style={styles.cell}><strong>{domain.name}</strong></td>
+                    <td style={styles.cell}>{domain.slug}</td>
+                    <td style={styles.cell}>{domain.available ? "Available" : "Allocated"}</td>
+                    <td style={styles.cell}>{domain.allocatedTenantName || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section style={styles.card}>
         <div
           style={{
             display: "flex",
@@ -263,6 +389,7 @@ export default function Tenants() {
                     "Email",
                     "Store",
                     "Requested slug",
+                    "Business domain",
                     "Submitted",
                     "Actions"
                   ].map((heading) => (
@@ -280,6 +407,7 @@ export default function Tenants() {
                     <td style={styles.cell}>{application.applicantEmail}</td>
                     <td style={styles.cell}>{application.storeName}</td>
                     <td style={styles.cell}>{application.requestedSlug}</td>
+                    <td style={styles.cell}>{application.requestedDomainSlug || "—"}</td>
                     <td style={styles.cell}>
                       {application.submittedAt
                         ? new Date(application.submittedAt).toLocaleString()

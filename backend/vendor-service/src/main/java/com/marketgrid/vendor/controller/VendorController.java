@@ -4,6 +4,7 @@ import com.marketgrid.vendor.entity.Vendor;
 import com.marketgrid.vendor.service.VendorService;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,6 +17,13 @@ public class VendorController {
 
     public VendorController(VendorService vendorService) {
         this.vendorService = vendorService;
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<Vendor> getCurrentVendor(Authentication authentication) {
+        return ResponseEntity.ok(
+                vendorService.getByEmailAndTenant(authentication.getName())
+        );
     }
 
     @PostMapping

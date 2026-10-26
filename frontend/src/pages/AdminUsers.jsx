@@ -1,18 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { api } from "../services/api";
 import {
   Users, UserPlus, Search, RefreshCw, X,
   ShieldCheck, Store, User, Mail, Lock, Phone, Building2
 } from "lucide-react";
-
-const API = "http://localhost:8080";
-
-const initialUsers = [
-  { id: 7, fullName: "Super Admin", email: "superadmin@marketgrid.com", role: "SUPER_ADMIN", tenantId: "Platform", status: "ACTIVE" },
-  { id: 1, fullName: "Admin User", email: "admin@test.com", role: "TENANT_ADMIN", tenantId: "Tech Store", status: "ACTIVE" },
-  { id: 12, fullName: "Krishna", email: "krishna@gmail.com", role: "VENDOR", tenantId: "Tech Store", status: "ACTIVE" },
-  { id: 10, fullName: "Customer One", email: "customer@test.com", role: "CUSTOMER", tenantId: "Tech Store", status: "ACTIVE" },
-  { id: 15, fullName: "Rahul Kumar", email: "rahul@test.com", role: "CUSTOMER", tenantId: "Gear Hub", status: "ACTIVE" }
-];
 
 function roleClass(role) {
   if (role === "SUPER_ADMIN") return "blue";
@@ -22,11 +13,48 @@ function roleClass(role) {
 }
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  async function loadUsers() {
+    setLoadingUsers(true);
+    setMessage("");
+    try {
+      const [data, tenantData] = await Promise.all([api.users(), api.tenants()]);
+      const rows = Array.isArray(data) ? data : [];
+      const activeTenants = (Array.isArray(tenantData) ? tenantData : [])
+        .filter(tenant => tenant.active);
+      setTenants(activeTenants);
+      setUsers(rows.map(user => ({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+        status: user.active ? "ACTIVE" : "INACTIVE"
+      })));
+      setForm(previous => ({
+        ...previous,
+        tenantId: activeTenants.some(tenant => String(tenant.id) === String(previous.tenantId))
+          ? String(previous.tenantId)
+          : String(activeTenants[0]?.id || "")
+      }));
+    } catch (error) {
+      setMessage(error.message || "Unable to load users from the server.");
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
 
   const [form, setForm] = useState({
     fullName: "",
@@ -35,7 +63,7 @@ export default function AdminUsers() {
     phone: "",
     businessName: "",
     role: "CUSTOMER",
-    tenantId: "1"
+    tenantId: ""
   });
 
   const filteredUsers = useMemo(() => {
@@ -59,6 +87,10 @@ export default function AdminUsers() {
 
   function openAdd(role) {
     setMessage("");
+    if (tenants.length === 0) {
+      setMessage("No active tenants are available. Activate a tenant before creating accounts.");
+      return;
+    }
 
     setForm({
       fullName: "",
@@ -67,7 +99,7 @@ export default function AdminUsers() {
       phone: "",
       businessName: "",
       role,
-      tenantId: "1"
+      tenantId: String(tenants[0].id)
     });
 
     setShowModal(true);
@@ -79,89 +111,42 @@ export default function AdminUsers() {
     setLoading(true);
     setMessage("");
 
-    const token = localStorage.getItem("marketgrid_token");
-
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          fullName: form.fullName,
-          email: form.email,
-          password: form.password,
-          tenantId: Number(form.tenantId),
-          role: form.role
-        })
+      const createdUser = await api.createUser({
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        tenantId: Number(form.tenantId),
+        role: form.role
       });
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `Registration failed (HTTP ${response.status})`
-        );
-      }
-
-      const createdUser = data.user || data;
-
       if (form.role === "VENDOR") {
-        const vendorResponse = await fetch(`${API}/api/vendors`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
+        try {
+          await api.createVendor({
             tenantId: Number(form.tenantId),
-            vendorName: form.fullName,
-            email: form.email,
-            phone: form.phone,
-            businessName:
-              form.businessName || `${form.fullName}'s Store`,
-            status: "ACTIVE",
-            createdAt: new Date().toISOString()
-          })
-        });
-
-        const vendorData =
-          await vendorResponse.json().catch(() => ({}));
-
-        if (!vendorResponse.ok) {
-          throw new Error(
-            vendorData.message ||
-            vendorData.error ||
-            `Vendor creation failed (HTTP ${vendorResponse.status})`
-          );
+            vendorName: form.fullName.trim(),
+            email: form.email.trim().toLowerCase(),
+            phone: form.phone.trim(),
+            businessName: form.businessName.trim(),
+            status: "ACTIVE"
+          });
+        } catch (vendorError) {
+          // Compensate if the vendor profile cannot be created so an orphan
+          // VENDOR login is not left behind without a matching vendor record.
+          if (createdUser?.id) {
+            try { await api.deleteUser(createdUser.id); } catch { /* report the original failure */ }
+          }
+          throw vendorError;
         }
       }
 
-      const newUser = {
-        id: createdUser.id || Date.now(),
-        fullName: createdUser.fullName || form.fullName,
-        email: createdUser.email || form.email,
-        role: form.role,
-        tenantId:
-          Number(form.tenantId) === 1
-            ? "Tech Store"
-            : `Tenant #${form.tenantId}`,
-        status: "ACTIVE"
-      };
-
-      setUsers(prev => [...prev, newUser]);
-
       setShowModal(false);
-
+      await loadUsers();
       setMessage(
         form.role === "VENDOR"
           ? "Vendor account and vendor profile created successfully."
           : "Customer account created successfully."
       );
-
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -190,7 +175,7 @@ export default function AdminUsers() {
         >
           <button
             className="secondary-btn"
-            onClick={() => setUsers([...users])}
+            onClick={loadUsers}
           >
             <RefreshCw size={17} />
             Refresh
@@ -231,7 +216,7 @@ export default function AdminUsers() {
           </div>
           <div>
             <span>Total Users</span>
-            <strong>{users.length}</strong>
+            <strong>{loadingUsers ? "…" : users.length}</strong>
             <small>Registered accounts</small>
           </div>
         </div>
@@ -243,7 +228,7 @@ export default function AdminUsers() {
           <div>
             <span>Customers</span>
             <strong>
-              {users.filter(u => u.role === "CUSTOMER").length}
+              {loadingUsers ? "…" : users.filter(u => u.role === "CUSTOMER").length}
             </strong>
             <small>Marketplace buyers</small>
           </div>
@@ -256,7 +241,7 @@ export default function AdminUsers() {
           <div>
             <span>Vendors</span>
             <strong>
-              {users.filter(u => u.role === "VENDOR").length}
+              {loadingUsers ? "…" : users.filter(u => u.role === "VENDOR").length}
             </strong>
             <small>Marketplace sellers</small>
           </div>
@@ -269,7 +254,7 @@ export default function AdminUsers() {
           <div>
             <span>Admins</span>
             <strong>
-              {users.filter(u => u.role.includes("ADMIN")).length}
+              {loadingUsers ? "…" : users.filter(u => u.role.includes("ADMIN")).length}
             </strong>
             <small>Administration accounts</small>
           </div>
@@ -320,7 +305,9 @@ export default function AdminUsers() {
 
             <tbody>
 
-              {filteredUsers.map(user => (
+              {loadingUsers && <tr><td colSpan="5" style={{textAlign:"center",padding:"30px"}}>Loading users from the server...</td></tr>}
+
+              {!loadingUsers && filteredUsers.map(user => (
 
                 <tr key={`${user.id}-${user.email}`}>
 
@@ -350,8 +337,8 @@ export default function AdminUsers() {
                   <td>{user.tenantId}</td>
 
                   <td>
-                    <span className="badge green">
-                      ACTIVE
+                    <span className={`badge ${user.status === "ACTIVE" ? "green" : "red"}`}>
+                      {user.status}
                     </span>
                   </td>
 
@@ -359,7 +346,7 @@ export default function AdminUsers() {
 
               ))}
 
-              {filteredUsers.length === 0 && (
+              {!loadingUsers && filteredUsers.length === 0 && (
                 <tr>
                   <td
                     colSpan="5"
@@ -510,25 +497,29 @@ export default function AdminUsers() {
                     name="password"
                     value={form.password}
                     onChange={updateField}
-                    placeholder="Minimum 6 characters"
+                    placeholder="Minimum 8 characters"
                     style={{ paddingLeft: "38px" }}
-                    minLength="6"
+                    minLength="8"
                     required
                   />
                 </div>
               </label>
 
               <label>
-                Tenant ID
+                Active Tenant
 
-                <input
-                  type="number"
+                <select
                   name="tenantId"
                   value={form.tenantId}
                   onChange={updateField}
-                  min="1"
                   required
-                />
+                >
+                  {tenants.map(tenant => (
+                    <option key={tenant.id} value={tenant.id}>
+                      {tenant.name || tenant.slug} (#{tenant.id}) — {tenant.slug}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               {form.role === "VENDOR" && (
