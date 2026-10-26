@@ -466,16 +466,20 @@ function Register() {
         <p className="muted">Choose how you want to join MarketGrid.</p>
 
         <form onSubmit={submit} className="auth-form">
-          <label>
-            Account Type
-            <select value={accountType} onChange={event => {
-              setAccountType(event.target.value); setError(""); setMessage("");
-            }}>
-              <option value="CUSTOMER">Customer — shop in a store</option>
-              <option value="VENDOR">Vendor — apply to sell in a store</option>
-              <option value="TENANT_ADMIN">Store Owner — apply to create a store</option>
-            </select>
-          </label>
+          <div className="register-role-switch" role="group" aria-label="Choose account type">
+            <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+              onClick={() => { setAccountType("CUSTOMER"); setError(""); setMessage(""); }}>
+              <span className="register-role-icon">♙</span><span>Customer</span>
+            </button>
+            <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+              onClick={() => { setAccountType("VENDOR"); setError(""); setMessage(""); }}>
+              <span className="register-role-icon">▣</span><span>Vendor</span>
+            </button>
+            <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+              onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); setMessage(""); }}>
+              <span className="register-role-icon">⬡</span><span>Store Owner</span>
+            </button>
+          </div>
 
           <label>
             Full Name
