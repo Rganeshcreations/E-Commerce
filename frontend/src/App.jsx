@@ -366,7 +366,7 @@ function Register() {
   const navigate = useNavigate();
   const [accountType, setAccountType] = useState("CUSTOMER");
   const [form, setForm] = useState({
-    fullName: "", email: "", password: "", tenantSlug: "",
+    fullName: "", email: "", password: "", confirmPassword: "", tenantSlug: "",
     storeName: "", domainSlug: "", businessName: ""
   });
   const [domains, setDomains] = useState([]);
@@ -413,8 +413,11 @@ function Register() {
     if (form.fullName.trim().length < 2) {
       setError("Enter your full name (at least 2 characters)."); return;
     }
-    if (accountType === "CUSTOMER" && form.password.length < 8) {
-      setError("Password must contain at least 8 characters."); return;
+    if (form.password.length < 8 || form.password.length > 72) {
+      setError("Password must contain between 8 and 72 characters."); return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Password and confirm password do not match."); return;
     }
     if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.domainSlug)) {
       setError("Enter the store name and select an available business domain."); return;
@@ -440,7 +443,8 @@ function Register() {
           applicantEmail: form.email.trim().toLowerCase(),
           storeName: form.storeName.trim(),
           requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
-          requestedDomainSlug: form.domainSlug
+          requestedDomainSlug: form.domainSlug,
+          password: form.password
         });
         setMessage("Store application submitted. A Super Admin must review it before the store is activated.");
       } else {
@@ -448,7 +452,8 @@ function Register() {
           applicantName: form.fullName.trim(),
           applicantEmail: form.email.trim().toLowerCase(),
           tenantSlug: form.tenantSlug,
-          businessName: form.businessName.trim()
+          businessName: form.businessName.trim(),
+          password: form.password
         });
         setMessage("Vendor application submitted. Your selected store administrator must review your request.");
       }
@@ -548,6 +553,24 @@ function Register() {
               Password
               <input type="password" name="password" value={form.password} onChange={updateField}
                 autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
+            </label>
+          </>}
+
+          {accountType !== "CUSTOMER" && <>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
             </label>
           </>}
 
