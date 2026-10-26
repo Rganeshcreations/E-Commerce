@@ -1,6 +1,7 @@
 package com.marketgrid.user.service;
 
 import com.marketgrid.user.dto.RegisterRequest;
+import com.marketgrid.user.dto.LoginRequest;
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.repository.UserRepository;
 import com.marketgrid.user.security.JwtUtil;
@@ -112,6 +113,38 @@ class AuthServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void loginReturnsTheStoredAccountRoleAndSignedToken() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail(" CUSTOMER@Example.COM ");
+        request.setPassword("LongPassword123");
+        request.setTenantSlug("demo-store");
+
+        AuthService.TenantLookupResponse tenant = new AuthService.TenantLookupResponse();
+        tenant.setId(5L);
+        tenant.setActive(true);
+        User user = new User(5L, "Customer One", "customer@example.com", "bcrypt-hash", "CUSTOMER", true);
+
+        when(restTemplate.getForObject(
+                eq("http://tenant-service/api/tenants/slug/{slug}"),
+                eq(AuthService.TenantLookupResponse.class),
+                eq("demo-store")
+        )).thenReturn(tenant);
+        when(userRepository.findByEmailAndTenantId("customer@example.com", 5L))
+                .thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("LongPassword123", "bcrypt-hash")).thenReturn(true);
+        when(jwtUtil.generateToken(
+                isNull(), eq(5L), eq("customer@example.com"), eq("CUSTOMER")
+        )).thenReturn("signed-token");
+
+        var response = authService.login(request);
+
+        assertEquals("signed-token", response.getToken());
+        assertEquals("CUSTOMER", response.getRole());
+        assertEquals("customer@example.com", response.getEmail());
+        assertEquals(5L, response.getTenantId());
     }
 
     private RegisterRequest validRequest() {
