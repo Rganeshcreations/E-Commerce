@@ -55,7 +55,7 @@ public class AuthService {
         if (fullName.length() < 2 || fullName.length() > 120) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Full name must be between 2 and 120 characters");
         }
-        if (!email.matches("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$")) {
+        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
         }
         if (password == null || password.length() < 8 || password.length() > 72) {
