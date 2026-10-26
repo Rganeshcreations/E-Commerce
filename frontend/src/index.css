@@ -1181,3 +1181,67 @@
 }
 
 /* CHECKOUT UI END */
+
+/* Registration account-type tiles, matching the MarketGrid login design */
+.register-role-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  margin: 2px 0 4px;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
+.register-role-switch button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 11px 5px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.register-role-switch button:hover { color: #2563eb; }
+.register-role-switch button.active {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .08);
+}
+.register-role-icon {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+  font-size: 21px;
+  line-height: 1;
+}
+.auth-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 38px 12px 14px;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
+  background-color: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.auth-form select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+}
+.auth-form select:disabled { background: #f8fafc; color: #94a3b8; }
+.auth-form small { color: #718096; font-size: 12px; font-weight: 400; line-height: 1.5; }
+@media (max-width: 420px) {
+  .register-role-switch button { font-size: 11px; padding-inline: 3px; }
+}
