@@ -160,18 +160,15 @@ public class OrderService {
                                     vendor.id()
                             );
 
-            orders.forEach(order ->
-                    order.setItems(
-                            order.getItems()
-                                    .stream()
-                                    .filter(item ->
-                                            vendor.id().equals(
-                                                    item.getVendorId()
-                                            )
-                                    )
-                                    .toList()
-                    )
-            );
+            orders.forEach(order -> {
+                List<OrderItem> vendorItems = order.getItems().stream()
+                        .filter(item -> vendor.id().equals(item.getVendorId()))
+                        .toList();
+                order.setItems(vendorItems);
+                order.setTotalAmount(vendorItems.stream()
+                        .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+            });
 
             return orders;
         }
@@ -231,16 +228,13 @@ public class OrderService {
                 );
             }
 
-            order.setItems(
-                    order.getItems()
-                            .stream()
-                            .filter(item ->
-                                    vendor.id().equals(
-                                            item.getVendorId()
-                                    )
-                            )
-                            .toList()
-            );
+            List<OrderItem> vendorItems = order.getItems().stream()
+                    .filter(item -> vendor.id().equals(item.getVendorId()))
+                    .toList();
+            order.setItems(vendorItems);
+            order.setTotalAmount(vendorItems.stream()
+                    .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
         }
 
         return order;
