@@ -15,6 +15,8 @@ public class SubmitTenantApplicationRequest {
     private String requestedSlug;
     @NotBlank @Size(max = 80)
     private String requestedDomainSlug;
+    @NotBlank @Size(min = 8, max = 72)
+    private String password;
 
     public SubmitTenantApplicationRequest() {}
     public String getApplicantName() { return applicantName; }
@@ -27,4 +29,6 @@ public class SubmitTenantApplicationRequest {
     public void setRequestedSlug(String v) { requestedSlug = v; }
     public String getRequestedDomainSlug() { return requestedDomainSlug; }
     public void setRequestedDomainSlug(String v) { requestedDomainSlug = v; }
+    public String getPassword() { return password; }
+    public void setPassword(String v) { password = v; }
 }
