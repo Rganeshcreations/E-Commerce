@@ -13,6 +13,8 @@ public class SubmitVendorApplicationRequest {
     private String tenantSlug;
     @NotBlank @Size(max = 120)
     private String businessName;
+    @NotBlank @Size(min = 8, max = 72)
+    private String password;
 
     public String getApplicantName() { return applicantName; }
     public void setApplicantName(String v) { applicantName = v; }
@@ -22,4 +24,6 @@ public class SubmitVendorApplicationRequest {
     public void setTenantSlug(String v) { tenantSlug = v; }
     public String getBusinessName() { return businessName; }
     public void setBusinessName(String v) { businessName = v; }
+    public String getPassword() { return password; }
+    public void setPassword(String v) { password = v; }
 }
