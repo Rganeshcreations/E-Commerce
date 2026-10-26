@@ -91,13 +91,43 @@ function useAuth() {
   return { token, role, tenantId };
 }
 
+function clearAuthSession() {
+  [
+    "marketgrid_token",
+    "marketgrid_role",
+    "marketgrid_user_id",
+    "marketgrid_customer_id",
+    "marketgrid_tenant",
+    "marketgrid_email",
+    "marketgrid_pending_checkout"
+  ].forEach(key => localStorage.removeItem(key));
+  saveCart([]);
+}
+
+function homeForRole(role) {
+  return ({
+    SUPER_ADMIN: "/admin",
+    TENANT_ADMIN: "/tenant",
+    VENDOR: "/vendor",
+    CUSTOMER: "/shop"
+  })[role] || "/login";
+}
+
+function RequireRole({ allowedRoles, children }) {
+  const { token, role } = useAuth();
+  if (!token || !role) return <Navigate to="/login" replace />;
+  if (!allowedRoles.includes(role)) return <Navigate to={homeForRole(role)} replace />;
+  return children;
+}
+
+
 function Header({ onMenu }) {
   const { role } = useAuth();
   const navigate = useNavigate();
 
   function logout() {
-    localStorage.clear();
-    navigate("/login");
+    clearAuthSession();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -200,7 +230,7 @@ function Sidebar({ role, open, onClose }) {
       ))}
 
       <div className="sidebar-bottom">
-        <button className="side-link" onClick={() => { localStorage.clear(); location.href="/login"; }}>
+        <button className="side-link" onClick={() => { clearAuthSession(); location.href="/login"; }}>
           <LogOut size={18}/> <span>Sign out</span>
         </button>
       </div>
@@ -244,160 +274,110 @@ function PageHead({ eyebrow, title, description, action }) {
 
 function Login() {
   const navigate = useNavigate();
-  const [loginRole, setLoginRole] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(event) {
+    event.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
-        })
-      });
+      const payload = {
+        email: email.trim().toLowerCase(),
+        password
+      };
+      if (tenantSlug.trim()) payload.tenantSlug = tenantSlug.trim();
 
-      const data = await response.json().catch(() => ({}));
+      const data = await api.login(payload);
+      if (!data?.token || !data?.role) {
+        throw new Error("Login response is missing the token or account role.");
+      }
 
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `Login failed (HTTP ${response.status})`
-        );
+      const homes = {
+        SUPER_ADMIN: "/admin",
+        TENANT_ADMIN: "/tenant",
+        VENDOR: "/vendor",
+        CUSTOMER: "/shop"
+      };
+      if (!homes[data.role]) {
+        throw new Error("This account has an unsupported role. Contact your administrator.");
       }
 
       localStorage.setItem("marketgrid_token", data.token);
       localStorage.setItem("marketgrid_role", data.role);
-      localStorage.setItem("marketgrid_user_id", data.userId);
-      localStorage.setItem("marketgrid_customer_id", data.userId);
-      localStorage.setItem("marketgrid_tenant", data.tenantId);
-
-      if (data.role === "SUPER_ADMIN") navigate("/admin");
-      else if (data.role === "TENANT_ADMIN") navigate("/tenant");
-      else if (data.role === "VENDOR") navigate("/vendor");
-      else navigate("/customer");
-
+      localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_customer_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+      localStorage.setItem("marketgrid_email", data.email || email.trim().toLowerCase());
+      navigate(homes[data.role], { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to sign in. Check your details and try again.");
     } finally {
       setLoading(false);
     }
   }
-  const roles = [
-    ["CUSTOMER", "\u{1F464}", "Customer"],
-    ["VENDOR", "\u{1F3EA}", "Vendor"],
-    ["TENANT_ADMIN", "\u{1F6E1}\u{FE0F}", "Tenant Admin"],
-    ["SUPER_ADMIN", "\u{1F451}", "Super Admin"]
-  ];
-  const selectedRole =
-    roles.find(r => r[0] === loginRole)?.[2] || "Customer";
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-
         <div className="auth-brand">
           <div className="brand-mark">M</div>
-          <div>
-            <strong>MarketGrid</strong>
-            <span>Marketplace Platform</span>
-          </div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
         </div>
 
         <h1>Welcome back</h1>
-        <p className="muted">
-          Sign in to continue to your workspace.
-        </p>
-
-        <div className="login-role-grid">
-          {roles.map(([value, icon, label]) => (
-            <button
-              type="button"
-              key={value}
-              className={
-                loginRole === value
-                  ? "login-role active"
-                  : "login-role"
-              }
-              onClick={() => setLoginRole(value)}
-            >
-              <span>{icon}</span>
-              <small>{label}</small>
-            </button>
-          ))}
-        </div>
+        <p className="muted">Sign in to continue to your workspace.</p>
 
         <form onSubmit={submit} className="auth-form">
-
           <label>
             Email
             <input
               type="email"
+              autoComplete="username"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={event => setEmail(event.target.value)}
               placeholder="you@example.com"
               required
             />
           </label>
 
-          {loginRole !== "SUPER_ADMIN" && (
-            <label>
-              Store Slug
-              <input
-                type="text"
-                value={tenantSlug}
-                onChange={e => setTenantSlug(e.target.value)}
-                placeholder="e.g. marketgrid-test-20261024"
-                required
-              />
-            </label>
-          )}
+          <label>
+            Store Slug
+            <input
+              type="text"
+              value={tenantSlug}
+              onChange={event => setTenantSlug(event.target.value)}
+              placeholder="Required for store accounts"
+            />
+            <small>Enter your store slug. Platform administrators can leave this blank.</small>
+          </label>
 
           <label>
             Password
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={event => setPassword(event.target.value)}
               placeholder="Enter your password"
               required
             />
           </label>
 
-          {error && (
-            <div className="info-box">
-              {error}
-            </div>
-          )}
+          {error && <div className="error-box" role="alert">{error}</div>}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Signing in..."
-              : `Sign In as ${selectedRole}`}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
           </button>
-
         </form>
 
         <p className="auth-footer">
-          Don't have an account?{" "}
-          <Link to="/register">Register</Link>
+          New to MarketGrid? <Link to="/register">Create a customer account</Link>
         </p>
-
       </div>
     </div>
   );
@@ -405,7 +385,6 @@ function Login() {
 
 function Register() {
   const navigate = useNavigate();
-  const [role, setRole] = useState("CUSTOMER");
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -413,40 +392,43 @@ function Register() {
     tenantSlug: ""
   });
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function updateField(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  function updateField(event) {
+    setForm(previous => ({ ...previous, [event.target.name]: event.target.value }));
   }
 
-  async function submit(e) {
-    e.preventDefault();
+  async function submit(event) {
+    event.preventDefault();
     setMessage("");
+    setError("");
+
+    if (form.fullName.trim().length < 2) {
+      setError("Enter your full name (at least 2 characters).");
+      return;
+    }
+    if (form.password.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      return;
+    }
+    if (!form.tenantSlug.trim()) {
+      setError("Enter the store slug where you want to register.");
+      return;
+    }
+
     setLoading(true);
-
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
+      await api.register({
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        tenantSlug: form.tenantSlug.trim()
       });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
-      }
-
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
-
-      setTimeout(() => navigate("/login"), 1200);
-
-    } catch (error) {
-      setMessage(error.message);
+      setMessage("Registration successful. You can now sign in.");
+      window.setTimeout(() => navigate("/login", { replace: true }), 900);
+    } catch (err) {
+      setError(err.message || "Registration failed. Please check your details.");
     } finally {
       setLoading(false);
     }
@@ -457,34 +439,11 @@ function Register() {
       <div className="auth-card">
         <div className="auth-brand">
           <div className="brand-mark">M</div>
-          <div>
-            <strong>MarketGrid</strong>
-            <span>Marketplace Platform</span>
-          </div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
         </div>
 
         <h1>Create your account</h1>
-        <p className="muted">
-          Join MarketGrid as a customer or vendor.
-        </p>
-
-        <div className="role-switch">
-          <button
-            type="button"
-            className={role === "CUSTOMER" ? "active" : ""}
-            onClick={() => setRole("CUSTOMER")}
-          >
-            Customer
-          </button>
-
-          <button
-            type="button"
-            className={role === "VENDOR" ? "active" : ""}
-            onClick={() => setRole("VENDOR")}
-          >
-            Vendor
-          </button>
-        </div>
+        <p className="muted">Register as a customer in an active MarketGrid store.</p>
 
         <form onSubmit={submit} className="auth-form">
           <label>
@@ -493,7 +452,9 @@ function Register() {
               name="fullName"
               value={form.fullName}
               onChange={updateField}
+              autoComplete="name"
               placeholder="Enter your full name"
+              minLength="2"
               required
             />
           </label>
@@ -505,20 +466,23 @@ function Register() {
               name="email"
               value={form.email}
               onChange={updateField}
+              autoComplete="email"
               placeholder="you@example.com"
               required
             />
           </label>
+
           <label>
             Store Slug
             <input
               name="tenantSlug"
               value={form.tenantSlug}
               onChange={updateField}
-              placeholder="e.g. marketgrid-test-20261024"
+              placeholder="e.g. marketgrid-demo"
               required
             />
           </label>
+
           <label>
             Password
             <input
@@ -526,42 +490,30 @@ function Register() {
               name="password"
               value={form.password}
               onChange={updateField}
-              placeholder="Create a password"
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              minLength="8"
               required
-              minLength="6"
             />
           </label>
 
-          {role === "VENDOR" && (
-            <div className="info-box">
-              Vendor accounts can manage products and inventory after
-              approval by the tenant administrator.
-            </div>
-          )}
+          {error && <div className="error-box" role="alert">{error}</div>}
+          {message && <div className="info-box" role="status">{message}</div>}
 
-          {message && (
-            <div className="info-box">
-              {message}
-            </div>
-          )}
-
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Creating account..." : `Create ${role === "VENDOR" ? "Vendor" : "Customer"} Account`}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Creating account..." : "Create Customer Account"}
           </button>
         </form>
 
         <p className="auth-footer">
-          Already have an account?{" "}
-          <Link to="/login">Sign in</Link>
+          Need a vendor account? Contact your store administrator for approved vendor onboarding.
         </p>
+        <p className="auth-footer">Already registered? <Link to="/login">Sign in</Link></p>
       </div>
     </div>
   );
 }
+
 function CustomerDashboard() {
   const { role } = useAuth();
   const navigate = useNavigate();
@@ -3027,47 +2979,52 @@ function RoleRedirect() {
 }
 
 function App() {
+  const allRoles = ["SUPER_ADMIN", "TENANT_ADMIN", "VENDOR", "CUSTOMER"];
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login/>}/><Route path="/register" element={<Register/>}/>
+        <Route path="/login" element={<Login/>}/>
+        <Route path="/register" element={<Register/>}/>
         <Route path="/" element={<><Header/><Home/></>}/>
+
         <Route element={<Shell/>}>
-          <Route path="/shop" element={<CustomerDashboard/>}/>
-          <Route path="/shop/products" element={<CustomerShop/>}/>
-          <Route path="/cart" element={<Cart/>}/>
-          <Route path="/checkout" element={<Checkout/>}/>
-          <Route path="/vendors" element={<Vendors/>}/>
-          <Route path="/orders" element={<Orders/>}/><Route path="/orders/:id" element={<OrderDetails/>}/>
+          <Route path="/shop" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerDashboard/></RequireRole>}/>
+          <Route path="/shop/products" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerShop/></RequireRole>}/>
+          <Route path="/cart" element={<RequireRole allowedRoles={["CUSTOMER"]}><Cart/></RequireRole>}/>
+          <Route path="/checkout" element={<RequireRole allowedRoles={["CUSTOMER"]}><Checkout/></RequireRole>}/>
 
-          <Route path="/admin" element={<Dashboard type="admin"/>}/>
-          <Route path="/admin/tenants" element={<TenantsPage/>}/>
-          <Route path="/admin/users" element={<AdminUsers/>}/>
-          <Route path="/admin/vendors" element={<AdminManagement type="vendors"/>}/>
-          <Route path="/admin/products" element={<AdminManagement type="products"/>}/>
-          <Route path="/admin/orders" element={<AdminManagement type="orders"/>}/>
-          <Route path="/admin/analytics" element={<AdminManagement type="analytics"/>}/>
-          <Route path="/admin/settings" element={<AdminManagement type="settings"/>}/>
+          <Route path="/vendors" element={<RequireRole allowedRoles={allRoles}><Vendors/></RequireRole>}/>
+          <Route path="/orders" element={<RequireRole allowedRoles={allRoles}><Orders/></RequireRole>}/>
+          <Route path="/orders/:id" element={<RequireRole allowedRoles={allRoles}><OrderDetails/></RequireRole>}/>
 
-          <Route path="/tenant" element={<Dashboard type="tenant"/>}/>
-          <Route path="/tenant/products" element={<TenantManagement type="products"/>}/>
-          <Route path="/tenant/vendors" element={<TenantVendors/>}/>
-          <Route path="/tenant/inventory" element={<TenantManagement type="inventory"/>}/>
-          <Route path="/tenant/orders" element={<TenantManagement type="orders"/>}/>
-          <Route path="/tenant/settings" element={<TenantManagement type="settings"/>}/>
+          <Route path="/admin" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><Dashboard type="admin"/></RequireRole>}/>
+          <Route path="/admin/tenants" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><TenantsPage/></RequireRole>}/>
+          <Route path="/admin/users" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminUsers/></RequireRole>}/>
+          <Route path="/admin/vendors" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="vendors"/></RequireRole>}/>
+          <Route path="/admin/products" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="products"/></RequireRole>}/>
+          <Route path="/admin/orders" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="orders"/></RequireRole>}/>
+          <Route path="/admin/analytics" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="analytics"/></RequireRole>}/>
+          <Route path="/admin/settings" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="settings"/></RequireRole>}/>
 
-          <Route path="/vendor" element={<VendorDashboard/>}/>
-          <Route path="/vendor/products" element={<VendorProducts/>}/>
-          <Route path="/vendor/inventory" element={<VendorInventory/>}/>
-          <Route path="/vendor/orders" element={<VendorOrders/>}/>
-          <Route path="/vendor/settings" element={<GenericPage title="Vendor Settings" description="Manage your vendor profile."/>}/>
+          <Route path="/tenant" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><Dashboard type="tenant"/></RequireRole>}/>
+          <Route path="/tenant/products" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="products"/></RequireRole>}/>
+          <Route path="/tenant/vendors" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantVendors/></RequireRole>}/>
+          <Route path="/tenant/inventory" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="inventory"/></RequireRole>}/>
+          <Route path="/tenant/orders" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="orders"/></RequireRole>}/>
+          <Route path="/tenant/settings" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="settings"/></RequireRole>}/>
+
+          <Route path="/vendor" element={<RequireRole allowedRoles={["VENDOR"]}><VendorDashboard/></RequireRole>}/>
+          <Route path="/vendor/products" element={<RequireRole allowedRoles={["VENDOR"]}><VendorProducts/></RequireRole>}/>
+          <Route path="/vendor/inventory" element={<RequireRole allowedRoles={["VENDOR"]}><VendorInventory/></RequireRole>}/>
+          <Route path="/vendor/orders" element={<RequireRole allowedRoles={["VENDOR"]}><VendorOrders/></RequireRole>}/>
+          <Route path="/vendor/settings" element={<RequireRole allowedRoles={["VENDOR"]}><GenericPage title="Vendor Settings" description="Manage your vendor profile."/></RequireRole>}/>
         </Route>
+
         <Route path="*" element={<RoleRedirect/>}/>
       </Routes>
     </BrowserRouter>
   );
 }
-
 export default App;
 
 
