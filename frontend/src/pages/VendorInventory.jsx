@@ -1,19 +1,7 @@
 import React,{useEffect,useState} from "react";
 import {Link} from "react-router-dom";
 import {RefreshCw,Save,ArrowLeft,Boxes} from "lucide-react";
-
-const BASE="http://localhost:8080";
-
-async function req(path,options={}){
-  const token=localStorage.getItem("marketgrid_token");
-  const headers={"Content-Type":"application/json",...(options.headers||{})};
-  if(token) headers.Authorization=`Bearer ${token}`;
-  const r=await fetch(BASE+path,{...options,headers});
-  const text=await r.text();
-  let data=null;try{data=text?JSON.parse(text):null}catch{data=text}
-  if(!r.ok)throw new Error(data?.message||data?.error||`Request failed (${r.status})`);
-  return data;
-}
+import {api} from "../services/api";
 
 export default function VendorInventory(){
   const [products,setProducts]=useState([]);
@@ -23,7 +11,8 @@ export default function VendorInventory(){
   const load=async()=>{
     try{
       setError("");
-      const data=await req("/api/products/vendor/1");
+      const vendor=await api.myVendor();
+      const data=await api.productsByVendor(vendor.id);
       setProducts((data||[]).map(p=>({...p,editStock:p.stockQuantity??0})));
     }catch(e){setError(e.message)}
   };
@@ -35,7 +24,7 @@ export default function VendorInventory(){
       setSaving(p.id);
       const body={...p,stockQuantity:Number(p.editStock)};
       delete body.editStock;
-      await req(`/api/products/${p.id}`,{method:"PUT",body:JSON.stringify(body)});
+      await api.updateProduct(p.id,body);
       await load();
     }catch(e){setError(e.message)}
     finally{setSaving(null)}
