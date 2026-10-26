@@ -5,6 +5,8 @@ import com.marketgrid.tenant.dto.TenantApplicationResponse;
 import com.marketgrid.tenant.entity.Tenant;
 import com.marketgrid.tenant.entity.TenantApplication;
 import com.marketgrid.tenant.service.TenantApplicationService;
+import com.marketgrid.tenant.security.JwtUtil;
+import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -16,16 +18,52 @@ import java.util.List;
 @RequestMapping("/api/tenant-applications")
 public class TenantApplicationController {
     private final TenantApplicationService applicationService;
-    public TenantApplicationController(TenantApplicationService applicationService) {
+    private final JwtUtil jwtUtil;
+    public TenantApplicationController(TenantApplicationService applicationService, JwtUtil jwtUtil) {
         this.applicationService = applicationService;
+        this.jwtUtil = jwtUtil;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TenantApplicationResponse submit(@Valid @RequestBody SubmitTenantApplicationRequest request) {
+    public TenantApplicationResponse submit(
+            @RequestHeader("Authorization") String authorization,
+            @Valid @RequestBody SubmitTenantApplicationRequest request) {
+        Claims claims = claimsFrom(authorization);
+        Object rawUserId = claims.get("userId");
+        if (!(rawUserId instanceof Number userId)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "The login token does not contain a valid user ID");
+        }
+        String email = claims.getSubject();
         return new TenantApplicationResponse(applicationService.submit(
-            request.getApplicantName(), request.getApplicantEmail(), request.getStoreName(),
-            request.getRequestedSlug(), request.getRequestedDomainSlug(), request.getPassword()));
+            userId.longValue(), request.getApplicantName(), email, request.getStoreName(),
+            request.getRequestedSlug(), request.getRequestedDomainSlug()));
+    }
+
+    @GetMapping("/mine")
+    public List<TenantApplicationResponse> getMine(@RequestHeader("Authorization") String authorization) {
+        Claims claims = claimsFrom(authorization);
+        Object rawUserId = claims.get("userId");
+        if (!(rawUserId instanceof Number userId)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "The login token does not contain a valid user ID");
+        }
+        return applicationService.getMine(userId.longValue()).stream()
+                .map(TenantApplicationResponse::new).toList();
+    }
+
+    private Claims claimsFrom(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Sign in before submitting or viewing an application");
+        }
+        try {
+            return jwtUtil.extractAllClaims(authorization.substring(7));
+        } catch (RuntimeException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Invalid login token");
+        }
     }
 
     @GetMapping
