@@ -6,11 +6,17 @@ import com.marketgrid.tenant.entity.Tenant;
 import com.marketgrid.tenant.entity.TenantApplication;
 import com.marketgrid.tenant.repository.BusinessDomainRepository;
 import com.marketgrid.tenant.repository.TenantApplicationRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Locale;
@@ -21,14 +27,19 @@ public class TenantApplicationService {
     private final TenantService tenantService;
     private final BusinessDomainRepository domainRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RestTemplate restTemplate;
+    private final String provisioningSecret;
 
     public TenantApplicationService(TenantApplicationRepository applicationRepository,
             TenantService tenantService, BusinessDomainRepository domainRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, RestTemplate restTemplate,
+            @Value("${app.internal.provisioning-secret:}") String provisioningSecret) {
         this.applicationRepository = applicationRepository;
         this.tenantService = tenantService;
         this.domainRepository = domainRepository;
         this.passwordEncoder = passwordEncoder;
+        this.restTemplate = restTemplate;
+        this.provisioningSecret = provisioningSecret;
     }
 
     @Transactional
@@ -88,6 +99,26 @@ public class TenantApplicationService {
         request.setSlug(application.getRequestedSlug());
         Tenant tenant = tenantService.create(request);
 
+        // Create the Tenant Admin account through the User Service, which owns user_db.
+        // Never write directly into another microservice's database.
+        if (provisioningSecret.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Internal account provisioning is not configured");
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-MarketGrid-Service-Secret", provisioningSecret);
+        ProvisionTenantAdminRequest account = new ProvisionTenantAdminRequest(
+                tenant.getId(), application.getApplicantName(), application.getApplicantEmail(),
+                application.getApplicantPasswordHash(), "TENANT_ADMIN");
+        try {
+            restTemplate.postForEntity("http://user-service/internal/provisioning/accounts",
+                    new HttpEntity<>(account, headers), String.class);
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Tenant was not approved because the login account could not be provisioned");
+        }
+
         domain.setAllocatedTenantId(tenant.getId());
         domainRepository.save(domain);
 
@@ -107,6 +138,27 @@ public class TenantApplicationService {
         application.setReviewedAt(java.time.LocalDateTime.now());
         application.setReviewNote(reason.trim());
         return applicationRepository.save(application);
+    }
+
+    public static class ProvisionTenantAdminRequest {
+        private final Long tenantId;
+        private final String fullName;
+        private final String email;
+        private final String passwordHash;
+        private final String role;
+        public ProvisionTenantAdminRequest(Long tenantId, String fullName, String email,
+                String passwordHash, String role) {
+            this.tenantId = tenantId;
+            this.fullName = fullName;
+            this.email = email;
+            this.passwordHash = passwordHash;
+            this.role = role;
+        }
+        public Long getTenantId() { return tenantId; }
+        public String getFullName() { return fullName; }
+        public String getEmail() { return email; }
+        public String getPasswordHash() { return passwordHash; }
+        public String getRole() { return role; }
     }
 
     private TenantApplication findPending(Long applicationId) {
