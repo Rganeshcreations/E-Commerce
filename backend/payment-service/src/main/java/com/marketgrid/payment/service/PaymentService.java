@@ -105,20 +105,59 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
-    public List<Payment> getAllPayments(Long tenantId) {
-        if (tenantId == null) {
-            throw new IllegalArgumentException("Tenant information not found");
+    public List<Payment> getAllPayments(Long tenantId, Long userId, String role) {
+        requireTenant(tenantId);
+        if ("CUSTOMER".equals(role)) {
+            requireUser(userId);
+            return paymentRepository.findAllByTenantIdAndCustomerId(tenantId, userId);
         }
+        requireAdmin(role);
         return paymentRepository.findAllByTenantId(tenantId);
     }
 
-    public Payment getPayment(Long id, Long tenantId) {
-        return paymentRepository.findByIdAndTenantId(id, tenantId)
+    public Payment getPayment(Long id, Long tenantId, Long userId, String role) {
+        requireTenant(tenantId);
+        Payment payment = paymentRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+        assertCanView(payment, userId, role);
+        return payment;
     }
 
-    public Payment getPaymentByOrder(Long orderId, Long tenantId) {
-        return paymentRepository.findByOrderIdAndTenantId(orderId, tenantId)
+    public Payment getPaymentByOrder(Long orderId, Long tenantId, Long userId, String role) {
+        requireTenant(tenantId);
+        Payment payment = paymentRepository.findByOrderIdAndTenantId(orderId, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+        assertCanView(payment, userId, role);
+        return payment;
     }
+
+    private void requireTenant(Long tenantId) {
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant information not found");
+        }
+    }
+
+    private void requireUser(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("Authenticated user ID is missing");
+        }
+    }
+
+    private void requireAdmin(String role) {
+        if (!"TENANT_ADMIN".equals(role) && !"SUPER_ADMIN".equals(role)) {
+            throw new IllegalArgumentException("You are not allowed to view tenant payments");
+        }
+    }
+
+    private void assertCanView(Payment payment, Long userId, String role) {
+        if ("CUSTOMER".equals(role)) {
+            requireUser(userId);
+            if (!userId.equals(payment.getCustomerId())) {
+                throw new IllegalArgumentException("You can only view your own payments");
+            }
+            return;
+        }
+        requireAdmin(role);
+    }
+
 }
