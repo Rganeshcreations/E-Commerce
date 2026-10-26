@@ -149,6 +149,9 @@ public class UserService {
         if ("SUPER_ADMIN".equals(existing.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Platform administrator accounts cannot be deleted here");
         }
+        if ("TENANT_ADMIN".equals(currentRole()) && "TENANT_ADMIN".equals(existing.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tenant administrators cannot delete another administrator account");
+        }
         userRepository.delete(existing);
     }
 
@@ -161,8 +164,12 @@ public class UserService {
         if (!"TENANT_ADMIN".equals(role)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only administrators can manage users");
         }
-        return userRepository.findByIdAndTenantId(id, requireTenant())
+        User user = userRepository.findByIdAndTenantId(id, requireTenant())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if ("TENANT_ADMIN".equals(user.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tenant administrators cannot manage another administrator account");
+        }
+        return user;
     }
 
     private Long requireTenant() {
