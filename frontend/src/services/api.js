@@ -77,6 +77,14 @@ export const api = {
       body: JSON.stringify(body)
     }),
 
+  // Public registration options and applications
+  domains: () => request("/api/domains"),
+  publicTenants: () => request("/api/public/tenants"),
+  submitTenantApplication: (body) =>
+    request("/api/tenant-applications", { method: "POST", body: JSON.stringify(body) }),
+  submitVendorApplication: (body) =>
+    request("/api/vendor-applications", { method: "POST", body: JSON.stringify(body) }),
+
   users: () => request("/api/users"),
 
   createUser: (body) =>
