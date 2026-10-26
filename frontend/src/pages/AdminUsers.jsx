@@ -334,7 +334,7 @@ export default function AdminUsers() {
 
               ))}
 
-              {filteredUsers.length === 0 && (
+              {!loadingUsers && filteredUsers.length === 0 && (
                 <tr>
                   <td
                     colSpan="5"
