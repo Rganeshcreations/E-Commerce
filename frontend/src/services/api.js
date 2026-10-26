@@ -1,4 +1,4 @@
-﻿
+
 const BASE = "http://localhost:8080";
 
 async function request(path, options = {}) {
@@ -75,6 +75,20 @@ export const api = {
 
   // Vendors
   vendors: () => request("/api/vendors"),
+
+  // Payments
+  createPayment: (body) =>
+    request("/api/payments", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  payments: () => request("/api/payments"),
+
+  payment: (id) => request(`/api/payments/${id}`),
+
+  paymentByOrder: (orderId) =>
+    request(`/api/payments/order/${orderId}`),
 
   // Orders
   orders: () => request("/api/orders"),
