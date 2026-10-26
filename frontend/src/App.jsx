@@ -526,40 +526,43 @@ function CustomerDashboard() {
   const email = localStorage.getItem("marketgrid_email") || "";
   const customerName = formatDisplayName(email);
 
-  const products = [
-    {
-      id: 1,
-      name: "Gaming Laptop",
-      vendor: "Tech Store",
-      price: 65000,
-      stock: 10,
-      image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 2,
-      name: "Mechanical Keyboard",
-      vendor: "Gear Hub",
-      price: 2500,
-      stock: 18,
-      image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 3,
-      name: "Wireless Mouse",
-      vendor: "Tech Store",
-      price: 1200,
-      stock: 25,
-      image: "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 4,
-      name: "Smart Watch",
-      vendor: "DigitalMart",
-      price: 4500,
-      stock: 12,
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+  const [products, setProducts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadRecommendations() {
+      try {
+        const [catalog, vendors] = await Promise.all([api.products(), api.vendors()]);
+        const vendorNames = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const items = (Array.isArray(catalog) ? catalog : [])
+          .filter(product => String(product.status || "ACTIVE").toUpperCase() === "ACTIVE")
+          .slice(0, 4)
+          .map(product => ({
+            id: product.id,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorNames.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            vendorId: product.vendorId,
+            price: Number(product.price || 0),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) setProducts(items);
+      } catch (error) {
+        if (active) setCatalogError(error.message || "Could not load recommended products.");
+      } finally {
+        if (active) setCatalogLoading(false);
+      }
     }
-  ];
+    loadRecommendations();
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="content">
@@ -819,6 +822,9 @@ function CustomerDashboard() {
             }}
           >
 
+            {catalogLoading && <p>Loading products from this store...</p>}
+            {catalogError && <p className="error-box" role="alert">{catalogError}</p>}
+            {!catalogLoading && !catalogError && products.length === 0 && <p>No active products are available in this store yet.</p>}
             {products.map(product => (
 
               <div
@@ -2740,12 +2746,10 @@ function Dashboard({ type }) {
   const [products, setProducts] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(type === "admin");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (type !== "admin") return;
-
     let cancelled = false;
 
     async function loadDashboard() {
