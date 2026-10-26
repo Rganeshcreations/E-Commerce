@@ -2082,16 +2082,44 @@ function Checkout() {
 }
 
 function Vendors() {
+  const [vendors,setVendors]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);setError("");
+      try{
+        const [vendorData,productData]=await Promise.all([api.vendors(),api.products()]);
+        const products=Array.isArray(productData)?productData:[];
+        const list=(Array.isArray(vendorData)?vendorData:[]).map(v=>({
+          ...v,
+          name:v.vendorName||v.businessName||("Vendor #"+v.id),
+          products:products.filter(p=>Number(p.vendorId)===Number(v.id)).length
+        }));
+        if(active)setVendors(list);
+      }catch(e){
+        if(active)setError(e.message||"Unable to load marketplace vendors.");
+      }finally{if(active)setLoading(false);}
+    }
+    load();
+    return()=>{active=false;};
+  },[]);
+
   return (
     <div className="content">
-      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore independent sellers operating on MarketGrid."/>
+      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore vendors registered in your active store." action={<button className="secondary-btn" onClick={()=>window.location.reload()}><RefreshCw size={17}/> Refresh</button>}/>
+      {error&&<div className="error-box" role="alert">{error}</div>}
+      {loading&&<div className="empty-card">Loading vendor directory...</div>}
+      {!loading&&!error&&vendors.length===0&&<div className="empty-card"><Store size={38}/><h2>No vendors available</h2><p>This store does not currently have active vendor profiles.</p></div>}
       <div className="vendor-grid">
-        {demoVendors.map(v=>(
+        {!loading&&vendors.map(v=>(
           <div className="vendor-card" key={v.id}>
-            <div className="vendor-avatar">{v.name[0]}</div>
-            <div><h3>{v.name}</h3><p>{v.email}</p></div>
-            <span className="badge green">{v.status}</span>
-            <div className="vendor-meta"><span>{v.products} products</span><button className="secondary-btn small">View Store</button></div>
+            <div className="vendor-avatar">{String(v.name||"V").charAt(0).toUpperCase()}</div>
+            <div><h3>{v.name}</h3><p>{v.email||"Contact details unavailable"}</p></div>
+            <span className={"badge "+(String(v.status||"").toUpperCase()==="ACTIVE"?"green":"orange")}>{v.status||"UNKNOWN"}</span>
+            <div className="vendor-meta"><span>{v.products} products</span><span>{v.businessName||"Marketplace vendor"}</span></div>
           </div>
         ))}
       </div>
