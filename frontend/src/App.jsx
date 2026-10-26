@@ -274,7 +274,7 @@ function Login() {
       if (!data?.token || !data?.role) {
         throw new Error("Login response is missing the token or account role.");
       }
-      if (data.role !== accountType) {
+      if (data.role !== accountType && !(accountType === "TENANT_ADMIN" && data.role === "TENANT_APPLICANT")) {
         throw new Error("This account does not match the selected account type.");
       }
       const homes = {
@@ -3127,6 +3127,7 @@ function App() {
         <Route path="/" element={<><Header/><Home/></>}/>
 
         <Route element={<Shell/>}>
+          <Route path="/tenant-applicant" element={<RequireRole allowedRoles={["TENANT_APPLICANT", "TENANT_ADMIN"]}><TenantApplicantDashboard/></RequireRole>}/>
           <Route path="/shop" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerDashboard/></RequireRole>}/>
           <Route path="/shop/products" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerShop/></RequireRole>}/>
           <Route path="/cart" element={<RequireRole allowedRoles={["CUSTOMER"]}><Cart/></RequireRole>}/>
