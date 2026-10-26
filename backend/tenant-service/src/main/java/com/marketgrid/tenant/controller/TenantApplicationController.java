@@ -25,7 +25,7 @@ public class TenantApplicationController {
     public TenantApplicationResponse submit(@Valid @RequestBody SubmitTenantApplicationRequest request) {
         return new TenantApplicationResponse(applicationService.submit(
             request.getApplicantName(), request.getApplicantEmail(), request.getStoreName(),
-            request.getRequestedSlug(), request.getRequestedDomainSlug()));
+            request.getRequestedSlug(), request.getRequestedDomainSlug(), request.getPassword()));
     }
 
     @GetMapping
