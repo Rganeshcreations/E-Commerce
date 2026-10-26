@@ -7,6 +7,7 @@ import com.marketgrid.tenant.entity.TenantApplication;
 import com.marketgrid.tenant.repository.BusinessDomainRepository;
 import com.marketgrid.tenant.repository.TenantApplicationRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,23 +20,28 @@ public class TenantApplicationService {
     private final TenantApplicationRepository applicationRepository;
     private final TenantService tenantService;
     private final BusinessDomainRepository domainRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public TenantApplicationService(TenantApplicationRepository applicationRepository,
-            TenantService tenantService, BusinessDomainRepository domainRepository) {
+            TenantService tenantService, BusinessDomainRepository domainRepository,
+            PasswordEncoder passwordEncoder) {
         this.applicationRepository = applicationRepository;
         this.tenantService = tenantService;
         this.domainRepository = domainRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
     public TenantApplication submit(String applicantName, String applicantEmail,
-            String storeName, String requestedSlug, String requestedDomainSlug) {
+            String storeName, String requestedSlug, String requestedDomainSlug, String password) {
         if (applicantName == null || applicantName.isBlank())
             throw new IllegalArgumentException("Applicant name is required");
         if (applicantEmail == null || !applicantEmail.trim().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
             throw new IllegalArgumentException("A valid applicant email is required");
         if (storeName == null || storeName.isBlank())
             throw new IllegalArgumentException("Store name is required");
+        if (password == null || password.length() < 8 || password.length() > 72)
+            throw new IllegalArgumentException("Password must contain 8 to 72 characters");
 
         String slug = requestedSlug == null ? "" : requestedSlug.trim().toLowerCase(Locale.ROOT);
         if (!slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*"))
@@ -56,6 +62,7 @@ public class TenantApplicationService {
         application.setStoreName(storeName.trim());
         application.setRequestedSlug(slug);
         application.setRequestedDomainSlug(domainSlug);
+        application.setApplicantPasswordHash(passwordEncoder.encode(password));
         application.setStatus(TenantApplication.Status.PENDING);
         return applicationRepository.save(application);
     }
