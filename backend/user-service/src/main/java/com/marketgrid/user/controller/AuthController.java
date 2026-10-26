@@ -1,10 +1,13 @@
+
 package com.marketgrid.user.controller;
 
 import com.marketgrid.user.dto.LoginRequest;
 import com.marketgrid.user.dto.LoginResponse;
 import com.marketgrid.user.dto.RegisterRequest;
+import com.marketgrid.user.dto.UserResponse;
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.service.AuthService;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,11 +22,13 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(
+    public ResponseEntity<UserResponse> register(
             @RequestBody RegisterRequest request) {
 
+        User createdUser = authService.register(request);
+
         return ResponseEntity.ok(
-                authService.register(request)
+                new UserResponse(createdUser)
         );
     }
 

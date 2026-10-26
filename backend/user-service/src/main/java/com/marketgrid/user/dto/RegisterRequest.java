@@ -3,12 +3,21 @@ package com.marketgrid.user.dto;
 public class RegisterRequest {
 
     private Long tenantId;
+    private String tenantSlug;
     private String fullName;
     private String email;
     private String password;
     private String role = "CUSTOMER";
 
     public RegisterRequest() {
+    }
+
+    public String getTenantSlug() {
+        return tenantSlug;
+    }
+
+    public void setTenantSlug(String tenantSlug) {
+        this.tenantSlug = tenantSlug;
     }
 
     public Long getTenantId() {

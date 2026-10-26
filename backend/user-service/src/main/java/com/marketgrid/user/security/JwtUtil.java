@@ -1,8 +1,11 @@
+
 package com.marketgrid.user.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -12,15 +15,17 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    private static final String SECRET_KEY =
-            "MarketGridSuperSecretKeyForJWT2026SecureKey123456";
-
     private static final long EXPIRATION_TIME =
             1000 * 60 * 60; // 1 hour
 
-    private final SecretKey key = Keys.hmacShaKeyFor(
-            SECRET_KEY.getBytes(StandardCharsets.UTF_8)
-    );
+    private final SecretKey key;
+
+    // Spring injects the JWT secret from application.properties
+    public JwtUtil(@Value("${app.jwt.secret}") String secret) {
+        this.key = Keys.hmacShaKeyFor(
+                secret.getBytes(StandardCharsets.UTF_8)
+        );
+    }
 
     public String generateToken(
             Long userId,
@@ -42,7 +47,6 @@ public class JwtUtil {
     }
 
     public Claims extractAllClaims(String token) {
-
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
@@ -67,7 +71,6 @@ public class JwtUtil {
     }
 
     public boolean isTokenValid(String token) {
-
         try {
             extractAllClaims(token);
             return true;

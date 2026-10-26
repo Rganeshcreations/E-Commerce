@@ -6,8 +6,13 @@ import com.marketgrid.user.dto.RegisterRequest;
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.repository.UserRepository;
 import com.marketgrid.user.security.JwtUtil;
+import org.springframework.web.client.RestTemplate;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class AuthService {
@@ -15,92 +20,141 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
+    private final RestTemplate restTemplate;
 
     public AuthService(
             UserRepository userRepository,
             JwtUtil jwtUtil,
-            PasswordEncoder passwordEncoder) {
-
+            PasswordEncoder passwordEncoder,
+            RestTemplate restTemplate) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
+        this.restTemplate = restTemplate;
     }
 
     public User register(RegisterRequest request) {
+        if (request.getTenantSlug() == null
+                || request.getTenantSlug().isBlank()) {
+            throw new RuntimeException("Store slug is required");
+        }
+
+        if (request.getFullName() == null || request.getFullName().isBlank()
+                || request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new RuntimeException(
+                    "Full name, email and password are required");
+        }
+
+        TenantLookupResponse tenant =
+                lookupActiveTenant(request.getTenantSlug().trim());
+
+        String email = request.getEmail().trim();
 
         if (userRepository.findByEmailAndTenantId(
-                request.getEmail(),
-                request.getTenantId()
-        ).isPresent()) {
-
+                email, tenant.getId()).isPresent()) {
             throw new RuntimeException(
-                    "User already exists for this tenant"
-            );
+                    "User already exists for this tenant");
         }
 
         User user = new User();
-
-        user.setTenantId(request.getTenantId());
-        user.setFullName(request.getFullName());
-        user.setEmail(request.getEmail());
-
-        user.setPassword(
-                passwordEncoder.encode(
-                        request.getPassword()
-                )
-        );
-
-        String role = request.getRole();
-        if (!"VENDOR".equals(role)) {
-            role = "CUSTOMER";
-        }
-        user.setRole(role);
+        user.setTenantId(tenant.getId());
+        user.setFullName(request.getFullName().trim());
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("CUSTOMER");
         user.setActive(true);
 
         return userRepository.save(user);
     }
 
     public LoginResponse login(LoginRequest request) {
-
-        User user = userRepository
-                .findByEmailAndTenantId(
-                        request.getEmail(),
-                        request.getTenantId()
-                )
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Invalid email, password or tenant"
-                        )
-                );
-
-        if (!user.isActive()) {
-            throw new RuntimeException(
-                    "User account is inactive"
-            );
+        if (request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new RuntimeException("Email and password are required");
         }
 
-        if (!passwordEncoder.matches(
-                request.getPassword(),
-                user.getPassword())) {
+        String email = request.getEmail().trim();
+        User user;
 
-            throw new RuntimeException(
-                    "Invalid email, password or tenant"
-            );
+        if (request.getTenantSlug() != null
+                && !request.getTenantSlug().isBlank()) {
+            TenantLookupResponse tenant =
+                    lookupActiveTenant(request.getTenantSlug().trim());
+
+            user = userRepository.findByEmailAndTenantId(
+                    email, tenant.getId())
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Invalid email, password or tenant"));
+        } else if (request.getTenantId() != null) {
+            user = userRepository.findByEmailAndTenantId(
+                    email, request.getTenantId())
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Invalid email, password or tenant"));
+        } else {
+            user = userRepository.findByEmail(email)
+                    .filter(u -> "SUPER_ADMIN".equals(u.getRole()))
+                    .orElseThrow(() ->
+                            new RuntimeException("Invalid email or password"));
+        }
+
+        if (!user.isActive()) {
+            throw new RuntimeException("User account is inactive");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Invalid email or password");
         }
 
         String token = jwtUtil.generateToken(
-                user.getId(),
-                user.getTenantId(),
-                user.getEmail(),
-                user.getRole()
-        );
+                user.getId(), user.getTenantId(), user.getEmail(), user.getRole());
 
         return new LoginResponse(
-                token,
-                user.getId(),
-                user.getTenantId(),
-                user.getEmail(),
-                user.getRole()
-        );
+                token, user.getId(), user.getTenantId(),
+                user.getEmail(), user.getRole());
+    }
+
+    private TenantLookupResponse lookupActiveTenant(String slug) {
+        try {
+            TenantLookupResponse tenant = restTemplate.getForObject(
+                    "http://tenant-service/api/tenants/slug/{slug}",
+                    TenantLookupResponse.class,
+                    slug);
+
+            if (tenant == null || tenant.getId() == null || !tenant.isActive()) {
+                throw new RuntimeException("Store not found or inactive");
+            }
+
+            return tenant;
+        } catch (org.springframework.web.client.HttpClientErrorException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                throw new RuntimeException("Store not found or inactive");
+            }
+            throw new RuntimeException(
+                    "Unable to verify store. Please try again later");
+        } catch (RestClientException ex) {
+            throw new RuntimeException(
+                    "Tenant Service is unavailable. Please try again later");
+        }
+    }
+
+    public static class TenantLookupResponse {
+        private Long id;
+        private String name;
+        private String slug;
+        private boolean active;
+
+        public TenantLookupResponse() {}
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getSlug() { return slug; }
+        public void setSlug(String slug) { this.slug = slug; }
+        public boolean isActive() { return active; }
+        public void setActive(boolean active) { this.active = active; }
     }
 }

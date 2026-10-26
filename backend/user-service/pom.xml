@@ -1,11 +1,10 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- Spring Boot Parent -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -13,7 +12,6 @@
         <relativePath/>
     </parent>
 
-    <!-- Project Information -->
     <groupId>com.marketgrid</groupId>
     <artifactId>user-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
@@ -21,13 +19,11 @@
     <name>user-service</name>
     <description>User Service for Multi-Tenant E-Commerce Marketplace</description>
 
-    <!-- Java and Spring Cloud Versions -->
     <properties>
         <java.version>21</java.version>
         <spring-cloud.version>2025.1.3</spring-cloud.version>
     </properties>
 
-    <!-- Dependencies -->
     <dependencies>
 
         <!-- Spring Data JPA -->
@@ -36,10 +32,16 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-        <!-- Spring Web -->
+        <!-- Spring MVC / REST APIs -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+
+        <!-- REST client for calling Tenant Service -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
         </dependency>
 
         <!-- MySQL Driver -->
@@ -49,10 +51,16 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Eureka Discovery Client -->
+        <!-- Eureka Service Discovery -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
+        <!-- Load-balanced REST client -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
 
         <!-- Spring Security -->
@@ -91,7 +99,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Web Test -->
+        <!-- Web MVC Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
@@ -100,7 +108,6 @@
 
     </dependencies>
 
-    <!-- Spring Cloud Dependency Management -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -113,16 +120,12 @@
         </dependencies>
     </dependencyManagement>
 
-    <!-- Build Configuration -->
     <build>
         <plugins>
-
-            <!-- Spring Boot Maven Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-
         </plugins>
     </build>
 

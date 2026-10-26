@@ -47,14 +47,12 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-
-                        .requestMatchers(
-                                "/api/auth/**"
-                        ).permitAll()
-
-                        .requestMatchers("/api/users/**")
-                        .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
-                )
+    .requestMatchers("/api/auth/**").permitAll()
+    .requestMatchers("/error").permitAll()
+    .requestMatchers("/api/users/**")
+    .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
+    .anyRequest().authenticated()
+)
 
                 .addFilterBefore(
                         jwtAuthenticationFilter,

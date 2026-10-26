@@ -39,7 +39,17 @@ public class OrderService {
 
         Long tenantId = requireTenant();
 
+        Authentication authentication = currentAuthentication();
+        String role = currentRole();
+
+        if (!"CUSTOMER".equals(role)) {
+            throw new RuntimeException("Only customers can place customer orders");
+        }
+
+        Long customerId = extractUserId(authentication);
+
         order.setTenantId(tenantId);
+        order.setCustomerId(customerId);
         order.setStatus("PLACED");
 
         BigDecimal total = BigDecimal.ZERO;

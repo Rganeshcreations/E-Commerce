@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
 } from "lucide-react";
 import "./index.css";
 import VendorDashboard from "./pages/VendorDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
 import AdminManagement from "./pages/AdminManagement";
+import TenantsPage from "./pages/Tenants";
 import AdminUsers from "./pages/AdminUsers";
 import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
@@ -47,6 +48,13 @@ function useCartCount() {
   return count;
 }
 
+function formatINR(amount) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2
+  }).format(Number(amount) || 0);
+}
 function formatDisplayName(email) {
   if (!email) return "Customer";
 
@@ -238,7 +246,7 @@ function Login() {
   const [loginRole, setLoginRole] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantId, setTenantId] = useState("1");
+  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -254,7 +262,7 @@ function Login() {
         body: JSON.stringify({
           email,
           password,
-          tenantId: Number(tenantId)
+          ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
         })
       });
 
@@ -342,6 +350,19 @@ function Login() {
             />
           </label>
 
+          {loginRole !== "SUPER_ADMIN" && (
+            <label>
+              Store Slug
+              <input
+                type="text"
+                value={tenantSlug}
+                onChange={e => setTenantSlug(e.target.value)}
+                placeholder="e.g. marketgrid-test-20261024"
+                required
+              />
+            </label>
+          )}
+
           <label>
             Password
             <input
@@ -349,17 +370,6 @@ function Login() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Enter your password"
-              required
-            />
-          </label>
-
-          <label>
-            Tenant ID
-            <input
-              type="number"
-              value={tenantId}
-              onChange={e => setTenantId(e.target.value)}
-              placeholder="1"
               required
             />
           </label>
@@ -399,7 +409,7 @@ function Register() {
     fullName: "",
     email: "",
     password: "",
-    tenantId: "1"
+    tenantSlug: ""
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -419,7 +429,7 @@ function Register() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ ...form, role })
+        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
       });
 
       const data = await response.json().catch(() => ({}));
@@ -498,7 +508,16 @@ function Register() {
               required
             />
           </label>
-
+          <label>
+            Store Slug
+            <input
+              name="tenantSlug"
+              value={form.tenantSlug}
+              onChange={updateField}
+              placeholder="e.g. marketgrid-test-20261024"
+              required
+            />
+          </label>
           <label>
             Password
             <input
@@ -624,7 +643,7 @@ function CustomerDashboard() {
               margin: "10px 0 8px"
             }}
           >
-            Welcome back, {customerName} 👋
+            Welcome back, {customerName} Ã°Å¸â€˜â€¹
           </h1>
 
           <p
@@ -1352,7 +1371,7 @@ function CustomerShop() {
                 }}
               >
                 <ShoppingCart size={15}/>
-                {addedId === p.id ? "Added âœ“" : p.stock <= 0 ? "Sold Out" : "Add"}
+                {addedId === p.id ? "Added ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : p.stock <= 0 ? "Sold Out" : "Add"}
               </button>
 
             </div>
@@ -1503,7 +1522,7 @@ function Cart() {
                   <td>{item.vendor}</td>
 
                   <td>
-                    ?{item.price.toLocaleString("en-IN")}
+                    {formatINR(item.price)}
                   </td>
 
                   <td>
@@ -1542,7 +1561,7 @@ function Cart() {
 
                   <td>
                     <b>
-                      ?{itemTotal.toLocaleString("en-IN")}
+                      {formatINR(itemTotal)}
                     </b>
                   </td>
 
@@ -1592,7 +1611,7 @@ function Cart() {
             <small>Cart Total</small>
 
             <h2 style={{ margin: "5px 0" }}>
-              ?{total.toLocaleString("en-IN")}
+              {formatINR(total)}
             </h2>
 
           </div>
@@ -1730,7 +1749,7 @@ function Checkout() {
             <div>
               <span>Amount Paid</span>
               <strong>
-                {total.toLocaleString("en-IN")}
+                {formatINR(total)}
               </strong>
             </div>
           </div>
@@ -2012,7 +2031,7 @@ function Checkout() {
                 </div>
 
                 <strong className="summary-price">
-                  {(item.price * (item.quantity || 1)).toLocaleString("en-IN")}
+                  {formatINR(item.price * (item.quantity || 1))}
                 </strong>
 
               </div>
@@ -2036,7 +2055,7 @@ function Checkout() {
 
           <div className="summary-total">
             <span>Total</span>
-            <strong>{total.toLocaleString("en-IN")}</strong>
+            <strong>{formatINR(total)}</strong>
           </div>
 
           <button
@@ -2044,7 +2063,7 @@ function Checkout() {
             onClick={placeOrder}
             disabled={processing || cart.length === 0}
           >
-            {processing ? "Processing Payment..." : `Place Order  ${total.toLocaleString("en-IN")}`}
+            {processing ? "Processing Payment..." : `Place Order  ${formatINR(total)}`}
           </button>
 
           <div className="checkout-safe">
@@ -2495,7 +2514,7 @@ function Orders() {
                 >
                   Tenant #{order.tenantId}
                   <span style={{ margin: "0 8px" }}>
-                    â€¢
+                    ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢
                   </span>
                   {order.items?.length || 0} item
                   {(order.items?.length || 0) !== 1
@@ -2695,55 +2714,242 @@ function OrderDetails() {
     </div>
   );
 }
+
 function Dashboard({ type }) {
   const config = {
-    admin: ["PLATFORM ADMINISTRATION","Super Admin Dashboard","Monitor the entire MarketGrid ecosystem.", "Platform"],
-    tenant: ["TENANT MANAGEMENT","Store Overview","Manage your marketplace operations from one place.", "Tenant"],
-    vendor: ["VENDOR CENTER","Vendor Dashboard","Manage products, inventory and orders.", "Vendor"]
+    admin: [
+      "PLATFORM ADMINISTRATION",
+      "Super Admin Dashboard",
+      "Monitor the entire MarketGrid ecosystem.",
+      "Platform"
+    ],
+    tenant: [
+      "TENANT MANAGEMENT",
+      "Store Overview",
+      "Manage your marketplace operations from one place.",
+      "Tenant"
+    ],
+    vendor: [
+      "VENDOR CENTER",
+      "Vendor Dashboard",
+      "Manage products, inventory and orders.",
+      "Vendor"
+    ]
   }[type];
+
+  const [products, setProducts] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(type === "admin");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (type !== "admin") return;
+
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+
+      const token = localStorage.getItem("marketgrid_token");
+      const headers = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+
+      try {
+        const results = await Promise.all([
+          fetch("http://localhost:8080/api/products", { headers }),
+          fetch("http://localhost:8080/api/vendors", { headers }),
+          fetch("http://localhost:8080/api/orders", { headers })
+        ]);
+
+        const failed = results.find(response => !response.ok);
+
+        if (failed) {
+          throw new Error(
+            `Dashboard API request failed (HTTP ${failed.status}).`
+          );
+        }
+
+        const [productData, vendorData, orderData] =
+          await Promise.all(results.map(response => response.json()));
+
+        if (!Array.isArray(productData) ||
+            !Array.isArray(vendorData) ||
+            !Array.isArray(orderData)) {
+          throw new Error("The dashboard API returned an unexpected response.");
+        }
+
+        if (!cancelled) {
+          setProducts(productData);
+          setVendors(vendorData);
+          setOrders(orderData);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Unable to load dashboard data.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [type]);
+
+  const totalStock = products.reduce(
+    (sum, product) => sum + (Number(product.stockQuantity ?? product.stock) || 0),
+    0
+  );
 
   return (
     <div className="content">
-      <PageHead eyebrow={config[0]} title={config[1]} description={config[2]}
-        action={<button className="secondary-btn"><Bell size={17}/> Notifications</button>}
+      <PageHead
+        eyebrow={config[0]}
+        title={config[1]}
+        description={config[2]}
+        action={
+          <button
+            className="secondary-btn"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw size={17} /> Refresh
+          </button>
+        }
       />
 
+      {error && (
+        <div className="info-box" role="alert">
+          Could not load all dashboard data: {error}
+        </div>
+      )}
+
       <div className="stats">
-        <Stat icon={Package} label="Total Products" value={type==="admin"?"5,240":"3"} note="Products available" />
-        <Stat icon={Users} label="Vendors" value={type==="admin"?"128":"2"} note="Registered sellers" tone="purple"/>
-        <Stat icon={Boxes} label="Total Stock" value={type==="admin"?"42,850":"75"} note="Units currently available" tone="green"/>
-        <Stat icon={Truck} label="Orders" value={type==="admin"?"12,480":"3"} note="Orders processed" tone="orange"/>
+        <Stat
+          icon={Package}
+          label="Total Products"
+          value={loading ? "Loading..." : products.length}
+          note="Products returned by API"
+        />
+        <Stat
+          icon={Users}
+          label="Vendors"
+          value={loading ? "Loading..." : vendors.length}
+          note="Vendors returned by API"
+          tone="purple"
+        />
+        <Stat
+          icon={Boxes}
+          label="Total Stock"
+          value={loading ? "Loading..." : totalStock.toLocaleString("en-IN")}
+          note="Units in returned products"
+          tone="green"
+        />
+        <Stat
+          icon={Truck}
+          label="Orders"
+          value={loading ? "Loading..." : orders.length}
+          note="Orders returned by API"
+          tone="orange"
+        />
       </div>
 
       <div className="dashboard-grid">
         <div className="table-card">
-          <div className="table-head"><div><b>{type==="admin"?"Platform activity":"Product inventory"}</b><small>Latest marketplace information</small></div><button className="secondary-btn small">View all</button></div>
-          <table><thead><tr><th>PRODUCT</th><th>VENDOR</th><th>PRICE</th><th>STOCK</th><th>STATUS</th></tr></thead>
-          <tbody>{demoProducts.map(p=><tr key={p.id}><td><b>{p.name}</b></td><td>{p.vendor}</td><td>?{p.price.toLocaleString("en-IN")}</td><td>{p.stock}</td><td><span className="badge green">Available</span></td></tr>)}</tbody></table>
+          <div className="table-head">
+            <div>
+              <b>Platform Products</b>
+              <small>
+                {loading
+                  ? "Loading products..."
+                  : `${products.length} products returned by API`}
+              </small>
+            </div>
+            <Link to="/admin/products" className="secondary-btn small">
+              View all
+            </Link>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>PRODUCT</th>
+                  <th>VENDOR ID</th>
+                  <th>PRICE</th>
+                  <th>STOCK</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!loading && products.slice(0, 5).map(product => (
+                  <tr key={product.id}>
+                    <td>
+                      <b>{product.name ?? product.productName ?? `Product #${product.id}`}</b>
+                    </td>
+                    <td>{product.vendorId ?? "Ã¢â‚¬â€"}</td>
+                    <td>
+                      {formatINR(product.price ?? 0)}
+                    </td>
+                    <td>{Number(product.stockQuantity ?? product.stock ?? 0)}</td>
+                    <td>
+                      <span className="badge green">
+                        {product.status ?? "Listed"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {!loading && !error && products.length === 0 && (
+                  <tr>
+                    <td colSpan="5">No products were returned by the API.</td>
+                  </tr>
+                )}
+
+                {loading && (
+                  <tr>
+                    <td colSpan="5">Loading product records...</td>
+                  </tr>
+                )}
+
+                {error && !loading && products.length === 0 && (
+                  <tr>
+                    <td colSpan="5">Product data is unavailable.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="panel">
           <div className="panel-title"><b>Quick actions</b></div>
-          {type==="admin" && <>
-            <Quick icon={Store} text="Manage tenants" href="/admin/tenants"/>
-            <Quick icon={Users} text="Manage users" href="/admin/users"/>
-            <Quick icon={BarChart3} text="View analytics" href="/admin/analytics"/>
+          {type === "admin" && <>
+            <Quick icon={Store} text="Manage tenants" href="/admin/tenants" />
+            <Quick icon={Users} text="Manage users" href="/admin/users" />
+            <Quick icon={BarChart3} text="View analytics" href="/admin/analytics" />
           </>}
-          {type==="tenant" && <>
-            <Quick icon={Package} text="Add product" href="/tenant/products"/>
-            <Quick icon={Users} text="Manage vendors" href="/tenant/vendors"/>
-            <Quick icon={Truck} text="Review orders" href="/tenant/orders"/>
+          {type === "tenant" && <>
+            <Quick icon={Package} text="Add product" href="/tenant/products" />
+            <Quick icon={Users} text="Manage vendors" href="/tenant/vendors" />
+            <Quick icon={Truck} text="Review orders" href="/tenant/orders" />
           </>}
-          {type==="vendor" && <>
-            <Quick icon={Plus} text="Add product" href="/vendor/products"/>
-            <Quick icon={Boxes} text="Update inventory" href="/vendor/inventory"/>
-            <Quick icon={Truck} text="Process orders" href="/vendor/orders"/>
+          {type === "vendor" && <>
+            <Quick icon={Plus} text="Add product" href="/vendor/products" />
+            <Quick icon={Boxes} text="Update inventory" href="/vendor/inventory" />
+            <Quick icon={Truck} text="Process orders" href="/vendor/orders" />
           </>}
         </div>
       </div>
     </div>
   );
 }
+
 
 function Quick({icon:Icon,text,href}) {
   return <Link to={href} className="quick"><Icon size={18}/><span>{text}</span><ChevronRight size={16}/></Link>
@@ -2787,7 +2993,7 @@ function App() {
           <Route path="/orders" element={<Orders/>}/><Route path="/orders/:id" element={<OrderDetails/>}/>
 
           <Route path="/admin" element={<Dashboard type="admin"/>}/>
-          <Route path="/admin/tenants" element={<AdminManagement type="tenants"/>}/>
+          <Route path="/admin/tenants" element={<TenantsPage/>}/>
           <Route path="/admin/users" element={<AdminUsers/>}/>
           <Route path="/admin/vendors" element={<AdminManagement type="vendors"/>}/>
           <Route path="/admin/products" element={<AdminManagement type="products"/>}/>
@@ -2815,6 +3021,11 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
 
 
 

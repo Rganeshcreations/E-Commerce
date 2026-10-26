@@ -1,3 +1,4 @@
+
 package com.marketgrid.user.dto;
 
 public class LoginRequest {
@@ -5,6 +6,7 @@ public class LoginRequest {
     private String email;
     private String password;
     private Long tenantId;
+    private String tenantSlug;
 
     public LoginRequest() {
     }
@@ -31,5 +33,13 @@ public class LoginRequest {
 
     public void setTenantId(Long tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public String getTenantSlug() {
+        return tenantSlug;
+    }
+
+    public void setTenantSlug(String tenantSlug) {
+        this.tenantSlug = tenantSlug;
     }
 }

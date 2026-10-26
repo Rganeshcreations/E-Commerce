@@ -1,4 +1,8 @@
+
 package com.marketgrid.user.service;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.repository.UserRepository;
@@ -33,14 +37,12 @@ public class UserService {
             );
         }
 
-        // Always use tenant ID from the authenticated JWT.
-        // Do not trust the tenant ID sent by the client.
+        // Always use the tenant ID from the authenticated JWT.
+        // Never trust the tenant ID sent by the client.
         user.setTenantId(tenantId);
 
         user.setPassword(
-                passwordEncoder.encode(
-                        user.getPassword()
-                )
+                passwordEncoder.encode(user.getPassword())
         );
 
         return userRepository.save(user);
@@ -69,10 +71,8 @@ public class UserService {
             );
         }
 
-        return userRepository.findById(id)
-                .filter(user ->
-                        user.getTenantId().equals(tenantId)
-                );
+        // Retrieve the user only if it belongs to this tenant.
+        return userRepository.findByIdAndTenantId(id, tenantId);
     }
 
     public Optional<User> getUserByEmailAndTenantId(
@@ -97,31 +97,19 @@ public class UserService {
             );
         }
 
-        User existingUser = userRepository.findById(id)
+        // Find the user by both ID and tenant ID.
+        User existingUser = userRepository
+                .findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found"
-                        )
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")
                 );
 
-        // Prevent updating a user belonging
-        // to another tenant.
-        if (!existingUser.getTenantId().equals(tenantId)) {
-            throw new RuntimeException(
-                    "Access denied for this tenant"
-            );
-        }
+        existingUser.setFullName(updatedUser.getFullName());
+        existingUser.setEmail(updatedUser.getEmail());
 
-        existingUser.setFullName(
-                updatedUser.getFullName()
-        );
-
-        existingUser.setEmail(
-                updatedUser.getEmail()
-        );
-
-        if (updatedUser.getPassword() != null &&
-                !updatedUser.getPassword().isBlank()) {
+        // Hash the new password before saving it.
+        if (updatedUser.getPassword() != null
+                && !updatedUser.getPassword().isBlank()) {
 
             existingUser.setPassword(
                     passwordEncoder.encode(
@@ -143,20 +131,12 @@ public class UserService {
             );
         }
 
-        User existingUser = userRepository.findById(id)
+        // A user from another tenant will not be found.
+        User existingUser = userRepository
+                .findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found"
-                        )
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")
                 );
-
-        // Prevent deleting a user belonging
-        // to another tenant.
-        if (!existingUser.getTenantId().equals(tenantId)) {
-            throw new RuntimeException(
-                    "Access denied for this tenant"
-            );
-        }
 
         userRepository.delete(existingUser);
     }

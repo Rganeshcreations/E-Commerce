@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+﻿import { Routes, Route, Navigate } from "react-router-dom";
 
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -12,6 +12,7 @@ import VendorInventory from "./pages/VendorInventory";
 import VendorOrders from "./pages/VendorOrders";
 
 import AdminDashboard from "./pages/AdminDashboard";
+import Tenants from "./pages/Tenants";
 import MainLayout from "./layouts/MainLayout";
 
 export default function AppRoutes() {
@@ -70,6 +71,12 @@ export default function AppRoutes() {
           path="/admin"
           element={<AdminDashboard />}
         />
+        <Route
+          path="/admin/tenants"
+          element={<Tenants />}
+        />
+
+
 
         <Route
           path="*"
@@ -86,3 +93,4 @@ export default function AppRoutes() {
     </Routes>
   );
 }
+

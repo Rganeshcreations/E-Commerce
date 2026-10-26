@@ -1,0 +1,160 @@
+﻿package com.marketgrid.user.service;
+
+import com.marketgrid.user.dto.LoginRequest;
+import com.marketgrid.user.dto.LoginResponse;
+import com.marketgrid.user.dto.RegisterRequest;
+import com.marketgrid.user.entity.User;
+import com.marketgrid.user.repository.UserRepository;
+import com.marketgrid.user.security.JwtUtil;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+
+@Service
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder;
+    private final RestClient tenantClient;
+
+    public AuthService(
+            UserRepository userRepository,
+            JwtUtil jwtUtil,
+            PasswordEncoder passwordEncoder,
+            RestTemplatePlaceholder unused) {
+        this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
+        this.tenantClient = null;
+    }
+
+    public User register(RegisterRequest request) {
+        if (request.getTenantSlug() == null
+                || request.getTenantSlug().isBlank()) {
+            throw new RuntimeException("Store slug is required");
+        }
+
+        if (request.getFullName() == null || request.getFullName().isBlank()
+                || request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new RuntimeException(
+                    "Full name, email and password are required");
+        }
+
+        TenantLookupResponse tenant =
+                lookupActiveTenant(request.getTenantSlug().trim());
+
+        String email = request.getEmail().trim();
+
+        if (userRepository.findByEmailAndTenantId(
+                email, tenant.getId()).isPresent()) {
+            throw new RuntimeException(
+                    "User already exists for this tenant");
+        }
+
+        User user = new User();
+        user.setTenantId(tenant.getId());
+        user.setFullName(request.getFullName().trim());
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("CUSTOMER");
+        user.setActive(true);
+
+        return userRepository.save(user);
+    }
+
+    public LoginResponse login(LoginRequest request) {
+        if (request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new RuntimeException("Email and password are required");
+        }
+
+        String email = request.getEmail().trim();
+        User user;
+
+        if (request.getTenantSlug() != null
+                && !request.getTenantSlug().isBlank()) {
+            TenantLookupResponse tenant =
+                    lookupActiveTenant(request.getTenantSlug().trim());
+
+            user = userRepository.findByEmailAndTenantId(
+                    email, tenant.getId())
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Invalid email, password or tenant"));
+        } else if (request.getTenantId() != null) {
+            user = userRepository.findByEmailAndTenantId(
+                    email, request.getTenantId())
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Invalid email, password or tenant"));
+        } else {
+            user = userRepository.findByEmail(email)
+                    .filter(u -> "SUPER_ADMIN".equals(u.getRole()))
+                    .orElseThrow(() ->
+                            new RuntimeException("Invalid email or password"));
+        }
+
+        if (!user.isActive()) {
+            throw new RuntimeException("User account is inactive");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Invalid email or password");
+        }
+
+        String token = jwtUtil.generateToken(
+                user.getId(), user.getTenantId(), user.getEmail(), user.getRole());
+
+        return new LoginResponse(
+                token, user.getId(), user.getTenantId(),
+                user.getEmail(), user.getRole());
+    }
+
+    private TenantLookupResponse lookupActiveTenant(String slug) {
+        try {
+            TenantLookupResponse tenant = tenantClient.get()
+                    .uri("/api/tenants/slug/{slug}", slug)
+                    .retrieve()
+                    .body(TenantLookupResponse.class);
+
+            if (tenant == null || tenant.getId() == null || !tenant.isActive()) {
+                throw new RuntimeException("Store not found or inactive");
+            }
+
+            return tenant;
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) {
+                throw new RuntimeException("Store not found or inactive");
+            }
+            throw new RuntimeException(
+                    "Unable to verify store. Please try again later");
+        } catch (RestClientException ex) {
+            throw new RuntimeException(
+                    "Tenant Service is unavailable. Please try again later");
+        }
+    }
+
+    public static class TenantLookupResponse {
+        private Long id;
+        private String name;
+        private String slug;
+        private boolean active;
+
+        public TenantLookupResponse() {}
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getSlug() { return slug; }
+        public void setSlug(String slug) { this.slug = slug; }
+        public boolean isActive() { return active; }
+        public void setActive(boolean active) { this.active = active; }
+    }
+}

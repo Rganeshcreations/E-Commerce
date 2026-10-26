@@ -1,0 +1,30 @@
+﻿MARKETGRID NEXT CHECK - 10/26/2026 08:35:03
+
+========== EUREKA SERVICE REGISTRY ==========
+SERVICE: API-GATEWAY
+STATUS=UP; HOST=Ganesh; PORT=; URL=http://Ganesh:8080/
+SERVICE: TENANT-SERVICE
+STATUS=UP; HOST=localhost; PORT=; URL=http://localhost:8086/
+SERVICE: PAYMENT-SERVICE
+STATUS=UP; HOST=Ganesh; PORT=; URL=http://Ganesh:8085/
+SERVICE: ORDER-SERVICE
+STATUS=UP; HOST=Ganesh; PORT=; URL=http://Ganesh:8084/
+SERVICE: VENDOR-SERVICE
+STATUS=UP; HOST=Ganesh; PORT=; URL=http://Ganesh:8082/
+SERVICE: PRODUCT-SERVICE
+STATUS=UP; HOST=Ganesh; PORT=; URL=http://Ganesh:8083/
+SERVICE: USER-SERVICE
+STATUS=UP; HOST=localhost; PORT=; URL=http://localhost:8081/
+
+========== SERVICE HEALTH ENDPOINTS ==========
+PORT 8080 : 404
+PORT 8081 : 403
+PORT 8082 : 403
+PORT 8083 : 403
+PORT 8084 : 403
+PORT 8085 : 403
+PORT 8086 : 403
+
+========== DIRECT USER SERVICE LOGIN TEST ==========
+http://localhost:8081/api/auth/login : HTTP 401 The remote server returned an error: (401) Unauthorized.
+http://localhost:8080/api/auth/login : HTTP 401 The remote server returned an error: (401) Unauthorized.

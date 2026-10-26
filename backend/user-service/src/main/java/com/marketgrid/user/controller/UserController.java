@@ -1,5 +1,6 @@
 package com.marketgrid.user.controller;
 
+import com.marketgrid.user.dto.UserResponse;
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.service.UserService;
 import org.springframework.http.ResponseEntity;
@@ -17,43 +18,42 @@ public class UserController {
         this.userService = userService;
     }
 
-    // Create a new user
     @PostMapping
-    public ResponseEntity<User> createUser(@RequestBody User user) {
+    public ResponseEntity<UserResponse> createUser(@RequestBody User user) {
         User createdUser = userService.createUser(user);
-        return ResponseEntity.ok(createdUser);
+        return ResponseEntity.ok(new UserResponse(createdUser));
     }
 
-    // Get all users
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        List<UserResponse> users = userService.getAllUsers()
+                .stream()
+                .map(UserResponse::new)
+                .toList();
+
+        return ResponseEntity.ok(users);
     }
 
-    // Get user by ID
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
-
+    public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
         return userService.getUserById(id)
+                .map(UserResponse::new)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Update user
     @PutMapping("/{id}")
-    public ResponseEntity<User> updateUser(
+    public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
             @RequestBody User user) {
 
-        return ResponseEntity.ok(userService.updateUser(id, user));
+        User updatedUser = userService.updateUser(id, user);
+        return ResponseEntity.ok(new UserResponse(updatedUser));
     }
 
-    // Delete user
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-
         userService.deleteUser(id);
-
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,9 +1,8 @@
+﻿
 const BASE = "http://localhost:8080";
 
 async function request(path, options = {}) {
-
-  const token =
-    localStorage.getItem("marketgrid_token");
+  const token = localStorage.getItem("marketgrid_token");
 
   const headers = {
     "Content-Type": "application/json",
@@ -14,16 +13,12 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(
-    `${BASE}${path}`,
-    {
-      ...options,
-      headers
-    }
-  );
+  const response = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers
+  });
 
   const text = await response.text();
-
   let data = null;
 
   try {
@@ -33,7 +28,6 @@ async function request(path, options = {}) {
   }
 
   if (!response.ok) {
-
     throw new Error(
       data?.message ||
       data?.error ||
@@ -45,21 +39,19 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-
+  // Authentication
   login: (body) =>
     request("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(body)
     }),
 
-  products: () =>
-    request("/api/products"),
+  // Products
+  products: () => request("/api/products"),
 
-  product: (id) =>
-    request(`/api/products/${id}`),
+  product: (id) => request(`/api/products/${id}`),
 
-  vendorProducts: () =>
-    request("/api/products/vendor/1"),
+  vendorProducts: () => request("/api/products/vendor/1"),
 
   productsByVendor: (vendorId) =>
     request(`/api/products/vendor/${vendorId}`),
@@ -81,14 +73,13 @@ export const api = {
       method: "DELETE"
     }),
 
-  vendors: () =>
-    request("/api/vendors"),
+  // Vendors
+  vendors: () => request("/api/vendors"),
 
-  orders: () =>
-    request("/api/orders"),
+  // Orders
+  orders: () => request("/api/orders"),
 
-  order: (id) =>
-    request(`/api/orders/${id}`),
+  order: (id) => request(`/api/orders/${id}`),
 
   createOrder: (body) =>
     request("/api/orders", {
@@ -99,9 +90,44 @@ export const api = {
   updateOrderStatus: (id, status) =>
     request(
       `/api/orders/${id}/status?status=${encodeURIComponent(status)}`,
-      {
-        method: "PATCH"
-      }
-    )
+      { method: "PATCH" }
+    ),
+
+  // Tenant management
+  tenants: () => request("/api/tenants"),
+
+  tenantBySlug: (slug) =>
+    request(`/api/tenants/slug/${encodeURIComponent(slug)}`),
+
+  // Retained for compatibility with existing code.
+  // The new Super Admin page will not expose direct creation.
+  createTenant: (body) =>
+    request("/api/tenants", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  setTenantActive: (id, active) =>
+    request(`/api/tenants/${id}/active?active=${active}`, {
+      method: "PATCH"
+    }),
+
+  // Tenant applications
+  tenantApplications: () =>
+    request("/api/tenant-applications"),
+
+  pendingTenantApplications: () =>
+    request("/api/tenant-applications/pending"),
+
+  approveTenantApplication: (id) =>
+    request(`/api/tenant-applications/${id}/approve`, {
+      method: "POST"
+    }),
+
+  rejectTenantApplication: (id, reason) =>
+    request(`/api/tenant-applications/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    })
 };
 
