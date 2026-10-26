@@ -1648,6 +1648,7 @@ function Checkout() {
   const [checkoutError, setCheckoutError] = useState("");
   const [orderId, setOrderId] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("SUCCESS");
+  const [orderTotal, setOrderTotal] = useState(null);
 
   async function placeOrder() {
     setCheckoutError("");
@@ -1655,10 +1656,10 @@ function Checkout() {
     if (
       !form.fullName.trim() ||
       !form.phone.trim() ||
-      !/^\\d{10}$/.test(form.phone.trim()) ||
+      !/^\d{10}$/.test(form.phone.trim()) ||
       !form.address.trim() ||
       !form.city.trim() ||
-      !/^\\d{6}$/.test(form.pincode.trim())
+      !/^\d{6}$/.test(form.pincode.trim())
     ) {
       setCheckoutError("Enter your name, a valid 10-digit phone number, address, city, and 6-digit pincode.");
       return;
@@ -1690,7 +1691,7 @@ function Checkout() {
         String(storedPending.tenantId) === String(tenantId) &&
         String(storedPending.customerId) === String(customerId)
       ) {
-        order = { id: storedPending.orderId };
+        order = await api.order(storedPending.orderId);
       } else {
         order = await api.createOrder({
           items: cart.map(item => ({
@@ -1710,6 +1711,7 @@ function Checkout() {
       }
 
       setOrderId(order.id);
+      setOrderTotal(Number(order.totalAmount ?? total));
       const payment = await api.createPayment({
         orderId: order.id,
         paymentMethod
@@ -1721,6 +1723,7 @@ function Checkout() {
       }
 
       setPaymentStatus(status);
+      setPaymentMethod(payment.paymentMethod || paymentMethod);
       setTransactionId(payment.transactionId || "Payment due on delivery");
       setProcessing(false);
       setSuccess(true);
@@ -1782,7 +1785,7 @@ function Checkout() {
             <div>
               <span>Amount Paid</span>
               <strong>
-                {formatINR(total)}
+                {formatINR(orderTotal ?? total)}
               </strong>
             </div>
           </div>
