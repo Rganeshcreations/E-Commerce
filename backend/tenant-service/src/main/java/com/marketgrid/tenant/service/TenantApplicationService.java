@@ -11,7 +11,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,34 +25,31 @@ public class TenantApplicationService {
     private final TenantApplicationRepository applicationRepository;
     private final TenantService tenantService;
     private final BusinessDomainRepository domainRepository;
-    private final PasswordEncoder passwordEncoder;
     private final RestTemplate restTemplate;
     private final String provisioningSecret;
 
     public TenantApplicationService(TenantApplicationRepository applicationRepository,
             TenantService tenantService, BusinessDomainRepository domainRepository,
-            PasswordEncoder passwordEncoder, RestTemplate restTemplate,
+            RestTemplate restTemplate,
             @Value("${app.internal.provisioning-secret:}") String provisioningSecret) {
         this.applicationRepository = applicationRepository;
         this.tenantService = tenantService;
         this.domainRepository = domainRepository;
-        this.passwordEncoder = passwordEncoder;
         this.restTemplate = restTemplate;
         this.provisioningSecret = provisioningSecret;
     }
 
     @Transactional
-    public TenantApplication submit(String applicantName, String applicantEmail,
-            String storeName, String requestedSlug, String requestedDomainSlug, String password) {
+    public TenantApplication submit(Long applicantUserId, String applicantName, String applicantEmail,
+            String storeName, String requestedSlug, String requestedDomainSlug) {
+        if (applicantUserId == null || applicantUserId <= 0)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "A signed-in applicant account is required");
         if (applicantName == null || applicantName.isBlank())
             throw new IllegalArgumentException("Applicant name is required");
         if (applicantEmail == null || !applicantEmail.trim().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
             throw new IllegalArgumentException("A valid applicant email is required");
         if (storeName == null || storeName.isBlank())
             throw new IllegalArgumentException("Store name is required");
-        if (password == null || password.length() < 8 || password.length() > 72)
-            throw new IllegalArgumentException("Password must contain 8 to 72 characters");
-
         String slug = requestedSlug == null ? "" : requestedSlug.trim().toLowerCase(Locale.ROOT);
         if (!slug.matches("[a-z0-9]+(?:-[a-z0-9]+)*"))
             throw new IllegalArgumentException("Store slug must use letters, numbers, and single hyphens");
@@ -68,18 +64,24 @@ public class TenantApplicationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "An application for this store slug is already pending");
 
         TenantApplication application = new TenantApplication();
+        application.setApplicantUserId(applicantUserId);
         application.setApplicantName(applicantName.trim());
         application.setApplicantEmail(applicantEmail.trim().toLowerCase(Locale.ROOT));
         application.setStoreName(storeName.trim());
         application.setRequestedSlug(slug);
         application.setRequestedDomainSlug(domainSlug);
-        application.setApplicantPasswordHash(passwordEncoder.encode(password));
+        application.setApplicantPasswordHash(null);
         application.setStatus(TenantApplication.Status.PENDING);
         return applicationRepository.save(application);
     }
 
     @Transactional(readOnly = true)
     public List<TenantApplication> getAll() { return applicationRepository.findAll(); }
+
+    @Transactional(readOnly = true)
+    public List<TenantApplication> getMine(Long applicantUserId) {
+        return applicationRepository.findByApplicantUserIdOrderBySubmittedAtDesc(applicantUserId);
+    }
 
     @Transactional(readOnly = true)
     public List<TenantApplication> getPending() {
@@ -99,24 +101,26 @@ public class TenantApplicationService {
         request.setSlug(application.getRequestedSlug());
         Tenant tenant = tenantService.create(request);
 
-        // Create the Tenant Admin account through the User Service, which owns user_db.
-        // Never write directly into another microservice's database.
+        // Promote the applicant's existing account. Never create a duplicate login.
         if (provisioningSecret.isBlank()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Internal account provisioning is not configured");
         }
+        if (application.getApplicantUserId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This legacy application has no linked applicant account; submit a new application after signing in");
+        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-MarketGrid-Service-Secret", provisioningSecret);
-        ProvisionTenantAdminRequest account = new ProvisionTenantAdminRequest(
-                tenant.getId(), application.getApplicantName(), application.getApplicantEmail(),
-                application.getApplicantPasswordHash(), "TENANT_ADMIN");
+        PromotionRequest promotion = new PromotionRequest(tenant.getId());
         try {
-            restTemplate.postForEntity("http://user-service/internal/provisioning/accounts",
-                    new HttpEntity<>(account, headers), String.class);
+            restTemplate.postForEntity(
+                    "http://user-service/internal/provisioning/accounts/" + application.getApplicantUserId() + "/promote",
+                    new HttpEntity<>(promotion, headers), String.class);
         } catch (RestClientException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "Tenant was not approved because the login account could not be provisioned");
+                    "Approval could not finish because the existing account could not be promoted");
         }
 
         domain.setAllocatedTenantId(tenant.getId());
@@ -140,25 +144,10 @@ public class TenantApplicationService {
         return applicationRepository.save(application);
     }
 
-    public static class ProvisionTenantAdminRequest {
+    public static class PromotionRequest {
         private final Long tenantId;
-        private final String fullName;
-        private final String email;
-        private final String passwordHash;
-        private final String role;
-        public ProvisionTenantAdminRequest(Long tenantId, String fullName, String email,
-                String passwordHash, String role) {
-            this.tenantId = tenantId;
-            this.fullName = fullName;
-            this.email = email;
-            this.passwordHash = passwordHash;
-            this.role = role;
-        }
+        public PromotionRequest(Long tenantId) { this.tenantId = tenantId; }
         public Long getTenantId() { return tenantId; }
-        public String getFullName() { return fullName; }
-        public String getEmail() { return email; }
-        public String getPasswordHash() { return passwordHash; }
-        public String getRole() { return role; }
     }
 
     private TenantApplication findPending(Long applicationId) {
