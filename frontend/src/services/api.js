@@ -97,7 +97,10 @@ export const api = {
 
   product: (id) => request(`/api/products/${id}`),
 
-  vendorProducts: () => request("/api/products/vendor/1"),
+  vendorProducts: async () => {
+    const vendor = await request("/api/vendors/me");
+    return request(`/api/products/vendor/${vendor.id}`);
+  },
 
   productsByVendor: (vendorId) =>
     request(`/api/products/vendor/${vendorId}`),
