@@ -1,5 +1,5 @@
 
-const BASE = "http://localhost:8080";
+const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 async function request(path, options = {}) {
   const token = localStorage.getItem("marketgrid_token");
@@ -42,6 +42,26 @@ export const api = {
   // Authentication
   login: (body) =>
     request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  register: (body) =>
+    request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  users: () => request("/api/users"),
+
+  createUser: (body) =>
+    request("/api/users", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
+  createVendor: (body) =>
+    request("/api/vendors", {
       method: "POST",
       body: JSON.stringify(body)
     }),
