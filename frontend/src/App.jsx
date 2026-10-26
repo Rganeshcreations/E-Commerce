@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, O
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw, UserRound, Store as StoreIcon, Building2
 } from "lucide-react";
 import "./index.css";
 import { api } from "./services/api";
@@ -367,27 +367,38 @@ function Register() {
   const [accountType, setAccountType] = useState("CUSTOMER");
   const [form, setForm] = useState({
     fullName: "", email: "", password: "", tenantSlug: "",
-    storeName: "", requestedSlug: "", domainSlug: "", businessName: ""
+    storeName: "", domainSlug: "", businessName: ""
   });
   const [domains, setDomains] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.domains(), api.publicTenants()])
-      .then(([domainData, tenantData]) => {
-        if (!active) return;
-        setDomains(Array.isArray(domainData) ? domainData : []);
-        setTenants(Array.isArray(tenantData) ? tenantData : []);
-      })
-      .catch(err => {
-        if (active) setError(err.message || "Could not load stores and business domains.");
-      })
-      .finally(() => { if (active) setLoadingOptions(false); });
+    async function loadOptions() {
+      setLoadingOptions(true);
+      setOptionsError("");
+      const [domainResult, tenantResult] = await Promise.allSettled([api.domains(), api.publicTenants()]);
+      if (!active) return;
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError("Could not load business domains: " + (domainResult.reason?.message || "API request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError(previous => [previous, "Could not load stores: " + (tenantResult.reason?.message || "API request failed")].filter(Boolean).join(" "));
+      }
+      setLoadingOptions(false);
+    }
+    loadOptions();
     return () => { active = false; };
   }, []);
 
@@ -405,8 +416,8 @@ function Register() {
     if (accountType === "CUSTOMER" && form.password.length < 8) {
       setError("Password must contain at least 8 characters."); return;
     }
-    if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.requestedSlug.trim() || !form.domainSlug)) {
-      setError("Enter the store name, requested store slug, and business domain."); return;
+    if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.domainSlug)) {
+      setError("Enter the store name and select an available business domain."); return;
     }
     if (accountType === "VENDOR" && (!form.tenantSlug || !form.businessName.trim())) {
       setError("Select the store you want to join and enter your business name."); return;
@@ -428,7 +439,7 @@ function Register() {
           applicantName: form.fullName.trim(),
           applicantEmail: form.email.trim().toLowerCase(),
           storeName: form.storeName.trim(),
-          requestedSlug: form.requestedSlug.trim().toLowerCase(),
+          requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
           requestedDomainSlug: form.domainSlug
         });
         setMessage("Store application submitted. A Super Admin must review it before the store is activated.");
@@ -465,16 +476,19 @@ function Register() {
         <form onSubmit={submit} className="auth-form">
           <div className="register-role-switch" role="group" aria-label="Choose account type">
             <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+              aria-pressed={accountType === "CUSTOMER"}
               onClick={() => { setAccountType("CUSTOMER"); setError(""); setMessage(""); }}>
-              <span className="register-role-icon">♙</span><span>Customer</span>
+              <UserRound className="register-role-icon" size={23}/><span>Customer</span>
             </button>
             <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+              aria-pressed={accountType === "VENDOR"}
               onClick={() => { setAccountType("VENDOR"); setError(""); setMessage(""); }}>
-              <span className="register-role-icon">▣</span><span>Vendor</span>
+              <StoreIcon className="register-role-icon" size={23}/><span>Vendor</span>
             </button>
             <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+              aria-pressed={accountType === "TENANT_ADMIN"}
               onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); setMessage(""); }}>
-              <span className="register-role-icon">⬡</span><span>Store Owner</span>
+              <Building2 className="register-role-icon" size={23}/><span>Store Owner</span>
             </button>
           </div>
 
@@ -528,19 +542,15 @@ function Register() {
                 placeholder="Name of your store" required />
             </label>
             <label>
-              Requested Store Slug
-              <input name="requestedSlug" value={form.requestedSlug} onChange={updateField}
-                placeholder="e.g. my-market-store" pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*" required />
-              <small>Use letters and numbers, separated by single hyphens.</small>
-            </label>
-            <label>
               Business Domain
               <select name="domainSlug" value={form.domainSlug} onChange={updateField} required disabled={loadingOptions}>
-                <option value="">{loadingOptions ? "Loading domains..." : "Select an available domain"}</option>
+                <option value="">{loadingOptions ? "Loading domains..." : availableDomains.length ? "Select an available domain" : "No available domains"}</option>
                 {availableDomains.map(domain => <option key={domain.id} value={domain.slug}>{domain.name}</option>)}
               </select>
-              {!loadingOptions && availableDomains.length === 0 &&
-                <small>No available domains are configured yet. Please contact the platform administrator.</small>}
+              {!loadingOptions && optionsError && <small className="auth-inline-error">{optionsError}</small>}
+              {!loadingOptions && !optionsError && availableDomains.length === 0 &&
+                <small>No available domains found. Super Admin must create a domain or allocate a different one.</small>}
+              {!loadingOptions && availableDomains.length > 0 && <small>{availableDomains.length} domain(s) available to request.</small>}
             </label>
             <p className="muted">Your store will be created only after Super Admin approval.</p>
           </>}
