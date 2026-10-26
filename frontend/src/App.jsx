@@ -459,8 +459,40 @@ function Register() {
     }
   }
 
-  const availableDomains = domains.filter(domain => domain.available);
+  // Treat a domain as available only when the API confirms it is unallocated.
+  // The allocatedTenantId fallback supports older API responses that omit "available".
+  const availableDomains = domains.filter(domain =>
+    domain.available === true ||
+    (domain.available == null && domain.allocatedTenantId == null)
+  );
   const activeTenants = tenants.filter(tenant => tenant.active);
+
+  async function refreshRegistrationOptions() {
+    setLoadingOptions(true);
+    setOptionsError("");
+    try {
+      const [domainResult, tenantResult] = await Promise.allSettled([
+        api.domains(),
+        api.publicTenants()
+      ]);
+      const errors = [];
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Business domains: " + (domainResult.reason?.message || "request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Active stores: " + (tenantResult.reason?.message || "request failed"));
+      }
+      setOptionsError(errors.join(". "));
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
 
   return (
     <div className="auth-page">
@@ -488,7 +520,7 @@ function Register() {
             <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
               aria-pressed={accountType === "TENANT_ADMIN"}
               onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); setMessage(""); }}>
-              <Building2 className="register-role-icon" size={23}/><span>Store Owner</span>
+              <Building2 className="register-role-icon" size={23}/><span>Tenant</span>
             </button>
           </div>
 
@@ -547,10 +579,25 @@ function Register() {
                 <option value="">{loadingOptions ? "Loading domains..." : availableDomains.length ? "Select an available domain" : "No available domains"}</option>
                 {availableDomains.map(domain => <option key={domain.id} value={domain.slug}>{domain.name}</option>)}
               </select>
-              {!loadingOptions && optionsError && <small className="auth-inline-error">{optionsError}</small>}
-              {!loadingOptions && !optionsError && availableDomains.length === 0 &&
-                <small>No available domains found. Super Admin must create a domain or allocate a different one.</small>}
-              {!loadingOptions && availableDomains.length > 0 && <small>{availableDomains.length} domain(s) available to request.</small>}
+              {!loadingOptions && optionsError && (
+                <small className="auth-inline-error">
+                  {optionsError}. Check that Tenant Service and API Gateway are running.
+                </small>
+              )}
+              {!loadingOptions && !optionsError && availableDomains.length === 0 && (
+                <small>No available domains yet. Super Admin must create a domain in Admin → Tenants.</small>
+              )}
+              {!loadingOptions && availableDomains.length > 0 && (
+                <small>{availableDomains.length} domain(s) available to request.</small>
+              )}
+              <button
+                type="button"
+                className="auth-text-button"
+                onClick={refreshRegistrationOptions}
+                disabled={loadingOptions}
+              >
+                {loadingOptions ? "Checking availability..." : "Refresh available domains"}
+              </button>
             </label>
             <p className="muted">Your store will be created only after Super Admin approval.</p>
           </>}
