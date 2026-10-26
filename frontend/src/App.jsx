@@ -17,7 +17,6 @@ import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
 import VendorOrders from "./pages/VendorOrders";
 
-const API = "http://localhost:8080";
 function getStoredCart() {
   try {
     return JSON.parse(localStorage.getItem("marketgrid_cart") || "[]");
@@ -2119,7 +2118,6 @@ function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
   const customerId = Number(
     localStorage.getItem("marketgrid_customer_id") ||
@@ -2556,23 +2554,15 @@ function OrderDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("marketgrid_token");
   const role = localStorage.getItem("marketgrid_role");
   const customerId = Number(localStorage.getItem("marketgrid_customer_id") || localStorage.getItem("marketgrid_user_id"));
 
   useEffect(() => {
     async function loadOrder() {
       try {
-        const response = await fetch(API + "/api/orders/" + id, {
-          headers: {
-            Authorization: "Bearer " + token
-          }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Order not found");
+        const data = await api.order(id);
+        if (!data || !data.id) {
+          throw new Error("Order not found");
         }
 
         if (
