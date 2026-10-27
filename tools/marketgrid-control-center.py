@@ -10,9 +10,10 @@ import re
 import socket
 import subprocess
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 import webbrowser
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,6 +68,8 @@ class ControlCenter(tk.Tk):
         self.geometry("900x650")
         self.minsize(760, 520)
         self.configure(padx=16, pady=14)
+        self.managed_processes = {}
+        self.busy = False
 
         ttk.Label(
             self, text="MarketGrid Control Center",
@@ -79,7 +82,9 @@ class ControlCenter(tk.Tk):
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", pady=(0, 10))
-        ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(side="left", padx=(0, 7))
+        ttk.Button(buttons, text="Start All", command=self.start_all).pack(side="left", padx=(0, 7))
+        ttk.Button(buttons, text="Stop All", command=self.stop_all).pack(side="left", padx=7)
+        ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(side="left", padx=7)
         ttk.Button(buttons, text="Run Backend Tests", command=self.run_backend_tests).pack(side="left", padx=7)
         ttk.Button(buttons, text="Build Frontend", command=self.build_frontend).pack(side="left", padx=7)
         ttk.Button(buttons, text="Open Frontend", command=lambda: webbrowser.open("http://localhost:5173")).pack(side="left", padx=7)
@@ -98,7 +103,7 @@ class ControlCenter(tk.Tk):
         self.log = tk.Text(self, height=14, wrap="word", state="disabled")
         self.log.pack(fill="both", expand=True, pady=(5, 0))
         self.write_log(f"Project folder: {ROOT}")
-        self.write_log("Safe mode: this version only checks ports and runs tests/builds.")
+        self.write_log("Managed mode: Start All skips existing services; Stop All targets only processes launched here.")
         self.refresh_status()
 
     def write_log(self, message: str) -> None:
@@ -117,6 +122,119 @@ class ControlCenter(tk.Tk):
                 self.write_log(f"Status check complete: {up}/{len(SERVICES)} ports listening.")
             self.after(0, update_ui)
         threading.Thread(target=worker, daemon=True).start()
+
+
+    def start_all(self) -> None:
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+        maven = find_maven()
+        if not maven:
+            messagebox.showerror("Maven not found", "Maven 3.9.16 was not found in your .m2 wrapper folder.")
+            return
+        env = os.environ.copy()
+        for key, label in [("DB_PASSWORD", "Database password"), ("JWT_SECRET", "JWT signing secret"), ("APP_PROVISIONING_SECRET", "Provisioning secret")]:
+            if not env.get(key):
+                value = simpledialog.askstring("Startup configuration", f"Enter {label} ({key}):", show="*", parent=self)
+                if value is None:
+                    self.write_log("Start All cancelled; no services were launched.")
+                    return
+                if not value.strip():
+                    messagebox.showerror("Missing configuration", f"{key} cannot be empty.")
+                    return
+                env[key] = value
+        definitions = [
+            ("Eureka", 8761, BACKEND / "eureka-server", True),
+            ("Tenant Service", 8086, BACKEND / "tenant-service", True),
+            ("User Service", 8081, BACKEND / "user-service", True),
+            ("Vendor Service", 8082, BACKEND / "vendor-service", True),
+            ("Product Service", 8083, BACKEND / "product-service", True),
+            ("Order Service", 8084, BACKEND / "order-service", True),
+            ("Payment Service", 8085, BACKEND / "payment-service", True),
+            ("API Gateway", 8080, BACKEND / "api-gateway", True),
+            ("React Frontend", 5173, FRONTEND, False),
+        ]
+        for name, port, folder, is_backend in definitions:
+            if is_backend and not (folder / "pom.xml").is_file():
+                messagebox.showerror("Missing service", f"Missing pom.xml: {folder}")
+                return
+        if not (FRONTEND / "package.json").is_file():
+            messagebox.showerror("Missing frontend", f"Missing {FRONTEND / 'package.json'}")
+            return
+        self.busy = True
+        self.write_log("Start All requested. Existing listening services will be skipped.")
+        threading.Thread(target=self._start_worker, args=(definitions, maven, env), daemon=True).start()
+
+    def _start_worker(self, definitions, maven, env):
+        try:
+            for name, port, folder, is_backend in definitions:
+                if port_is_open(port):
+                    self.after(0, lambda name=name, port=port: self.write_log(f"{name}: already listening on {port}; skipped."))
+                    continue
+                if is_backend:
+                    command = [os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c", '"' + str(maven) + '" -B -ntp spring-boot:run']
+                else:
+                    command = [os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c", "npm run dev -- --host localhost"]
+                try:
+                    proc = subprocess.Popen(command, cwd=str(folder), env=env, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+                except Exception as exc:
+                    self.after(0, lambda name=name, exc=exc: self.write_log(f"{name}: launch failed ({type(exc).__name__})."))
+                    continue
+                self.managed_processes[name] = proc
+                threading.Thread(target=self._read_output, args=(name, proc), daemon=True).start()
+                self.after(0, lambda name=name, port=port, pid=proc.pid: self.write_log(f"{name}: launched PID {pid}; waiting for port {port}."))
+                deadline = time.monotonic() + (60 if is_backend else 25)
+                while time.monotonic() < deadline:
+                    if port_is_open(port):
+                        self.after(0, lambda name=name, port=port: self.write_log(f"{name}: listening on port {port}."))
+                        break
+                    if proc.poll() is not None:
+                        self.after(0, lambda name=name: self.write_log(f"{name}: launcher exited before port became available; inspect logs."))
+                        break
+                    time.sleep(1)
+                else:
+                    self.after(0, lambda name=name, port=port: self.write_log(f"{name}: startup timed out on port {port}; continuing."))
+            self.after(0, self.refresh_status)
+            self.after(0, lambda: self.write_log("Start All sequence finished."))
+        finally:
+            self.after(0, self._idle)
+
+    def _read_output(self, name, proc):
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                self.after(0, lambda line=line, name=name: self.write_log(f"[{name}] {line.rstrip()}"))
+
+    def _idle(self):
+        self.busy = False
+
+    def stop_all(self) -> None:
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+        active = [(name, proc) for name, proc in self.managed_processes.items() if proc.poll() is None]
+        if not active:
+            messagebox.showinfo("Nothing to stop", "No running services were launched by this Control Center. Services started elsewhere were left untouched.")
+            self.write_log("Stop All: no managed processes to stop; independent services untouched.")
+            return
+        if not messagebox.askyesno("Confirm Stop All", f"Stop {len(active)} process tree(s) launched by this Control Center? Independently started services will not be targeted."):
+            return
+        self.busy = True
+        threading.Thread(target=self._stop_worker, args=(active,), daemon=True).start()
+
+    def _stop_worker(self, active):
+        try:
+            for name, proc in reversed(active):
+                if proc.poll() is None:
+                    try:
+                        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, text=True, timeout=15, check=False)
+                        self.after(0, lambda name=name, pid=proc.pid: self.write_log(f"{name}: stop requested for managed process tree PID {pid}."))
+                    except Exception as exc:
+                        self.after(0, lambda name=name, exc=exc: self.write_log(f"{name}: stop request failed ({type(exc).__name__})."))
+            time.sleep(1)
+            self.after(0, self.refresh_status)
+            self.after(0, lambda: self.write_log("Stop All finished; independently started services were not targeted."))
+        finally:
+            self.after(0, self._idle)
 
     def run_commands(self, title: str, commands: list[tuple[str, list[str], Path]]) -> None:
         def worker() -> None:
