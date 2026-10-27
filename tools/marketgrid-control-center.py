@@ -1,7 +1,7 @@
 """
-MarketGrid Control Center - first safe iteration.
-Monitors local ports and runs existing project tests/builds.
-It does not start/stop processes or access database credentials yet.
+MarketGrid Control Center.
+Monitors local ports, runs tests/builds, and manages only processes it launches.
+Required startup secrets are requested in masked dialogs and never saved by this tool.
 """
 from __future__ import annotations
 
