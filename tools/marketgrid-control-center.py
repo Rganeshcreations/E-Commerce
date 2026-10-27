@@ -12,6 +12,8 @@ import subprocess
 import threading
 import time
 import tkinter as tk
+import urllib.error
+import urllib.request
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 import webbrowser
@@ -85,19 +87,22 @@ class ControlCenter(tk.Tk):
         ttk.Button(buttons, text="Start All", command=self.start_all).pack(side="left", padx=(0, 7))
         ttk.Button(buttons, text="Stop All", command=self.stop_all).pack(side="left", padx=7)
         ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(side="left", padx=7)
+        ttk.Button(buttons, text="HTTP Health Checks", command=self.refresh_http_health).pack(side="left", padx=7)
         ttk.Button(buttons, text="Run Backend Tests", command=self.run_backend_tests).pack(side="left", padx=7)
         ttk.Button(buttons, text="Build Frontend", command=self.build_frontend).pack(side="left", padx=7)
         ttk.Button(buttons, text="Open Frontend", command=lambda: webbrowser.open("http://localhost:5173")).pack(side="left", padx=7)
         ttk.Button(buttons, text="Open API Gateway", command=lambda: webbrowser.open("http://localhost:8080")).pack(side="left", padx=7)
 
-        self.table = ttk.Treeview(self, columns=("port", "status"), show="headings", height=9)
+        self.table = ttk.Treeview(self, columns=("port", "status", "http"), show="headings", height=9)
         self.table.heading("port", text="Port")
         self.table.heading("status", text="TCP Status")
+        self.table.heading("http", text="HTTP Check")
         self.table.column("port", width=90, anchor="center")
         self.table.column("status", width=140, anchor="center")
+        self.table.column("http", width=200, anchor="center")
         self.table.pack(fill="x", pady=(0, 10))
         for name, port in SERVICES:
-            self.table.insert("", "end", iid=str(port), values=(port, "Checking…"))
+            self.table.insert("", "end", iid=str(port), values=(port, "Checking…", "Not checked"))
 
         ttk.Label(self, text="Activity log", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         self.log = tk.Text(self, height=14, wrap="word", state="disabled")
@@ -123,6 +128,55 @@ class ControlCenter(tk.Tk):
             self.after(0, update_ui)
         threading.Thread(target=worker, daemon=True).start()
 
+
+
+    def refresh_http_health(self) -> None:
+        """Probe HTTP endpoints without assuming Actuator is enabled."""
+        def probe(name: str, port: int) -> tuple[int, str]:
+            candidates = ["/actuator/health", "/"] if name != "Eureka" else ["/actuator/health", "/eureka/apps", "/"]
+            last_result = "No HTTP response"
+            for host in ("127.0.0.1", "::1"):
+                for path in candidates:
+                    url_host = f"[{host}]" if ":" in host else host
+                    request = urllib.request.Request(
+                        f"http://{url_host}:{port}{path}",
+                        headers={"User-Agent": "MarketGrid-Control-Center/1.0"},
+                    )
+                    try:
+                        with urllib.request.urlopen(request, timeout=2) as response:
+                            status = response.status
+                        if status == 200 and path == "/actuator/health":
+                            return port, "HEALTH ENDPOINT 200"
+                        if status == 200:
+                            last_result = "HTTP 200 (reachable; health not confirmed)"
+                        else:
+                            last_result = f"HTTP {status} (reachable)"
+                        break
+                    except urllib.error.HTTPError as exc:
+                        # An HTTP error still proves the server answered; it does not prove health.
+                        last_result = f"HTTP {exc.code} (reachable; health not confirmed)"
+                        if exc.code in (401, 403):
+                            break
+                    except (urllib.error.URLError, TimeoutError, OSError):
+                        continue
+                if last_result != "No HTTP response":
+                    break
+            return port, last_result
+
+        def worker() -> None:
+            results = [(name, *probe(name, port)) for name, port in SERVICES]
+            def update_ui() -> None:
+                for name, port, result in results:
+                    self.table.set(str(port), "http", result)
+                good = sum(1 for _, _, result in results if result == "HEALTH ENDPOINT 200")
+                reachable = sum(1 for _, _, result in results if result != "No HTTP response")
+                self.write_log(
+                    f"HTTP checks complete: {reachable}/{len(SERVICES)} endpoints responded; "
+                    f"{good} returned Actuator health HTTP 200. HTTP reachability alone does not prove application or database health."
+                )
+            self.after(0, update_ui)
+        self.write_log("Starting HTTP checks (Actuator first; fallback paths indicate reachability only).")
+        threading.Thread(target=worker, daemon=True).start()
 
     def start_all(self) -> None:
         if self.busy:
