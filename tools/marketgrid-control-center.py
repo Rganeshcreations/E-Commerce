@@ -42,11 +42,14 @@ def safe_log(text: str) -> str:
 
 
 def port_is_open(port: int, timeout: float = 0.7) -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+    """Check IPv4 and IPv6 loopback because Vite may bind only to ::1."""
+    for host in ("127.0.0.1", "::1"):
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def find_maven() -> Path | None:
