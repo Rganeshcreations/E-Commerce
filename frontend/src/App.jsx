@@ -6,6 +6,7 @@ import {
   Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
 } from "lucide-react";
 import "./index.css";
+import { api } from "./services/api";
 import VendorDashboard from "./pages/VendorDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
@@ -409,7 +410,8 @@ function Register() {
     fullName: "",
     email: "",
     password: "",
-    tenantSlug: ""
+    tenantSlug: "",
+    businessName: ""
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -424,26 +426,28 @@ function Register() {
     setLoading(true);
 
     try {
+      if (role === "VENDOR") {
+        await api.submitVendorApplication({
+          tenantSlug: form.tenantSlug.trim(),
+          applicantName: form.fullName.trim(),
+          email: form.email.trim(),
+          businessName: form.businessName.trim()
+        });
+        setMessage("Application submitted successfully. The selected store administrator must approve it before vendor access is granted.");
+        return;
+      }
+
       const response = await fetch(`${API}/api/auth/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, role: "CUSTOMER", tenantSlug: form.tenantSlug.trim() })
       });
-
       const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
         throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
       }
-
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
-
+      setMessage("Registration successful. You can now sign in.");
       setTimeout(() => navigate("/login"), 1200);
-
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -508,6 +512,19 @@ function Register() {
               required
             />
           </label>
+          {role === "VENDOR" && (
+            <label>
+              Business Name
+              <input
+                name="businessName"
+                value={form.businessName}
+                onChange={updateField}
+                placeholder="Enter business/store name"
+                required
+              />
+            </label>
+          )}
+
           <label>
             Store Slug
             <input
