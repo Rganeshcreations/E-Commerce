@@ -202,8 +202,13 @@ function Sidebar({ role, open, onClose }) {
         <ShieldCheck size={18}/>
         <div>
           <b>{role.replace("_", " ")}</b>
-          <small>{role === "SUPER_ADMIN" ? "Platform Administration" : `Tenant #${localStorage.getItem("marketgrid_tenant") || 1}`}</small>
-        </div>
+          <small>
+  {role === "SUPER_ADMIN"
+    ? "Platform Administration"
+    : role === "CUSTOMER"
+      ? "My Account"
+      : role.replace("_", " ")}
+</small>        </div>
       </div>
 
       <p className="side-label">MAIN</p>
@@ -791,8 +796,8 @@ function CustomerDashboard() {
         {[
           [Package, "Orders", catalogLoading ? "—" : customerOrders.length, "View your purchases"],
           [ShoppingCart, "Cart Items", cartCount, "Items waiting for checkout"],
-          [Eye, "Wishlist", "Coming soon", "Wishlist module not connected"],
-          [Truck, "Saved Addresses", "Coming soon", "Address book module not connected"]
+          [Eye, "Wishlist", "0", "Saved products"],
+          [Truck, "Saved Addresses", "0", "Manage delivery addresses"]
         ].map(([Icon, label, value, note]) => (
 
           <div

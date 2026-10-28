@@ -1,0 +1,3200 @@
+import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
+import {
+  LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
+  ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw, UserRound, Store as StoreIcon, Building2
+} from "lucide-react";
+import "./index.css";
+import { api } from "./services/api";
+import VendorDashboard from "./pages/VendorDashboard";
+import TenantManagement from "./pages/TenantManagement";
+import TenantVendors from "./pages/TenantVendors";
+import AdminManagement from "./pages/AdminManagement";
+import TenantsPage from "./pages/Tenants";
+import AdminUsers from "./pages/AdminUsers";
+import VendorProducts from "./pages/VendorProducts";
+import VendorInventory from "./pages/VendorInventory";
+import VendorOrders from "./pages/VendorOrders";
+import TenantApplicantDashboard from "./pages/TenantApplicantDashboard";
+
+function getStoredCart() {
+  try {
+    return JSON.parse(localStorage.getItem("marketgrid_cart") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveCart(items) {
+  localStorage.setItem("marketgrid_cart", JSON.stringify(items));
+  window.dispatchEvent(new Event("marketgrid_cart_updated"));
+}
+
+function useCartCount() {
+  const [count, setCount] = useState(() => getStoredCart().length);
+
+  useEffect(() => {
+    const update = () => setCount(getStoredCart().length);
+
+    window.addEventListener("marketgrid_cart_updated", update);
+    window.addEventListener("storage", update);
+
+    return () => {
+      window.removeEventListener("marketgrid_cart_updated", update);
+      window.removeEventListener("storage", update);
+    };
+  }, []);
+
+  return count;
+}
+
+function formatINR(amount) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2
+  }).format(Number(amount) || 0);
+}
+function formatDisplayName(email) {
+  if (!email) return "Customer";
+
+  return email
+    .split("@")[0]
+    .split(/[._-]/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function useAuth() {
+  const token = localStorage.getItem("marketgrid_token");
+  const role = localStorage.getItem("marketgrid_role");
+  const tenantId = localStorage.getItem("marketgrid_tenant");
+  return { token, role, tenantId };
+}
+
+function clearAuthSession() {
+  [
+    "marketgrid_token",
+    "marketgrid_role",
+    "marketgrid_user_id",
+    "marketgrid_customer_id",
+    "marketgrid_tenant",
+    "marketgrid_email",
+    "marketgrid_pending_checkout"
+  ].forEach(key => localStorage.removeItem(key));
+  saveCart([]);
+}
+
+function homeForRole(role) {
+  return ({
+    SUPER_ADMIN: "/admin",
+    TENANT_ADMIN: "/tenant",
+    TENANT_APPLICANT: "/tenant-applicant",
+    VENDOR: "/vendor",
+    CUSTOMER: "/shop"
+  })[role] || "/login";
+}
+
+function RequireRole({ allowedRoles, children }) {
+  const { token, role } = useAuth();
+  if (!token || !role) return <Navigate to="/login" replace />;
+  if (!allowedRoles.includes(role)) return <Navigate to={homeForRole(role)} replace />;
+  return children;
+}
+
+
+function Header({ onMenu }) {
+  const { role } = useAuth();
+  const navigate = useNavigate();
+
+  function logout() {
+    clearAuthSession();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <header className="topbar">
+      <button className="mobile-menu" onClick={onMenu}><Menu size={21}/></button>
+      <Link to="/" className="brand">
+        <span className="brand-mark">M</span>
+        <span>
+          <strong>MarketGrid</strong>
+          <small>Marketplace Platform</small>
+        </span>
+      </Link>
+
+      <div className="global-search">
+        <Search size={18}/>
+        <input placeholder="Search products, brands and vendors..." />
+      </div>
+
+      <nav className="topnav">
+        <Link to="/shop">Products</Link>
+        <Link to="/vendors">Vendors</Link>
+        <Link to="/orders">Orders</Link>
+        <Link to="/cart"><ShoppingCart size={19}/></Link>
+        {!role ? (
+          <><Link className="secondary-btn small" to="/register">Register</Link><Link className="primary-btn small" to="/login">Sign In</Link></>
+        ) : (
+          <button className="avatar-btn" onClick={logout}>Logout</button>
+        )}
+      </nav>
+    </header>
+  );
+}
+
+function Sidebar({ role, open, onClose }) {
+  const admin = role === "SUPER_ADMIN";
+  const tenant = role === "TENANT_ADMIN";
+  const vendor = role === "VENDOR";
+  const customer = role === "CUSTOMER";
+
+  const links = customer
+    ? [
+        ["/shop", LayoutDashboard, "Marketplace"],
+        ["/shop/products", Package, "Products"],
+        ["/vendors", Store, "Vendors"],
+        ["/cart", ShoppingCart, "My Cart"],
+        ["/orders", Truck, "My Orders"]
+      ]
+    : vendor
+    ? [
+        ["/vendor", LayoutDashboard, "Overview"],
+        ["/vendor/products", Package, "My Products"],
+        ["/vendor/inventory", Boxes, "Inventory"],
+        ["/vendor/orders", Truck, "Orders"],
+        ["/vendor/settings", Settings, "Settings"]
+      ]
+    : tenant
+    ? [
+        ["/tenant", LayoutDashboard, "Overview"],
+        ["/tenant/products", Package, "Products"],
+        ["/tenant/vendors", Users, "Vendors"],
+        ["/tenant/inventory", Boxes, "Inventory"],
+        ["/tenant/orders", Truck, "Orders"],
+        ["/tenant/settings", Settings, "Settings"]
+      ]
+    : admin
+    ? [
+        ["/admin", LayoutDashboard, "Platform Overview"],
+        ["/admin/tenants", Store, "Tenants"],
+        ["/admin/users", Users, "Users"],
+        ["/admin/vendors", Users, "Vendors"],
+        ["/admin/products", Package, "Products"],
+        ["/admin/orders", Truck, "Orders"],
+        ["/admin/analytics", BarChart3, "Analytics"],
+        ["/admin/settings", Settings, "Settings"]
+      ]
+    : [];
+
+  if (!role) return null;
+
+  return (
+    <aside className={`sidebar ${open ? "open" : ""}`}>
+      <div className="sidebar-head">
+        <div className="mini-brand"><span className="brand-mark">M</span><b>MarketGrid</b></div>
+        <button className="close-menu" onClick={onClose}><X size={19}/></button>
+      </div>
+
+      <div className="role-box">
+        <ShieldCheck size={18}/>
+        <div>
+          <b>{role.replace("_", " ")}</b>
+          <small>{role === "SUPER_ADMIN" ? "Platform Administration" : `Tenant #${localStorage.getItem("marketgrid_tenant") || 1}`}</small>
+        </div>
+      </div>
+
+      <p className="side-label">MAIN</p>
+      {links.map(([path, Icon, label]) => (
+        <Link key={path} to={path} onClick={onClose} className="side-link">
+          <Icon size={18}/><span>{label}</span>
+        </Link>
+      ))}
+
+      <div className="sidebar-bottom">
+        <button className="side-link" onClick={() => { clearAuthSession(); location.href="/login"; }}>
+          <LogOut size={18}/> <span>Sign out</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function Shell({ children }) {
+  const { role } = useAuth();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="app">
+      <Header onMenu={() => setOpen(true)}/>
+      <Sidebar role={role} open={open} onClose={() => setOpen(false)}/>
+      <main className={role ? "main with-sidebar" : "main"}><Outlet /></main>
+    </div>
+  );
+}
+
+function Stat({ icon: Icon, label, value, note, tone="blue" }) {
+  return (
+    <div className="stat">
+      <div className={`stat-icon ${tone}`}><Icon size={20}/></div>
+      <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
+    </div>
+  );
+}
+
+function PageHead({ eyebrow, title, description, action }) {
+  return (
+    <div className="page-head">
+      <div>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function Login() {
+  const navigate = useNavigate();
+  const [accountType, setAccountType] = useState("CUSTOMER");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const payload = { email: email.trim().toLowerCase(), password };
+      const data = await api.login(payload);
+      if (!data?.token || !data?.role) {
+        throw new Error("Login response is missing the token or account role.");
+      }
+      if (data.role !== accountType && !(accountType === "TENANT_ADMIN" && data.role === "TENANT_APPLICANT")) {
+        throw new Error("This account does not match the selected account type.");
+      }
+      const homes = {
+        SUPER_ADMIN: "/admin", TENANT_ADMIN: "/tenant",
+        TENANT_APPLICANT: "/tenant-applicant", VENDOR: "/vendor", CUSTOMER: "/shop"
+      };
+      if (!homes[data.role]) throw new Error("Unsupported account role. Contact your administrator.");
+      localStorage.setItem("marketgrid_token", data.token);
+      localStorage.setItem("marketgrid_role", data.role);
+      localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_customer_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+      localStorage.setItem("marketgrid_email", data.email || email.trim().toLowerCase());
+      navigate(homes[data.role], { replace: true });
+    } catch (err) {
+      setError(err.message || "Unable to sign in. Check your details and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <div className="brand-mark">M</div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
+        </div>
+        <h1>Welcome back</h1>
+        <p className="muted">Sign in to continue to your workspace.</p>
+
+        <div className="login-role-switch" role="group" aria-label="Choose account type">
+          <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+            onClick={() => { setAccountType("CUSTOMER"); setError(""); }}>
+            <span className="login-role-icon">♙</span><span>Customer</span>
+          </button>
+          <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+            onClick={() => { setAccountType("VENDOR"); setError(""); }}>
+            <span className="login-role-icon">▣</span><span>Vendor</span>
+          </button>
+          <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">⬡</span><span>Tenant Admin</span>
+          </button>
+          <button type="button" className={accountType === "SUPER_ADMIN" ? "active" : ""}
+            onClick={() => { setAccountType("SUPER_ADMIN"); setError(""); }}>
+            <span className="login-role-icon">♛</span><span>Super Admin</span>
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="auth-form">
+          <label>
+            Email
+            <input type="email" autoComplete="username" value={email}
+              onChange={event => setEmail(event.target.value)}
+              placeholder="you@example.com" required />
+          </label>
+          <label>
+            Password
+            <input type="password" autoComplete="current-password" value={password}
+              onChange={event => setPassword(event.target.value)}
+              placeholder="Enter your password" required />
+          </label>
+          {error && <div className="error-box" role="alert">{error}</div>}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+        <p className="auth-footer">
+          New to MarketGrid? <Link to="/register">Create an account</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Register() {
+  const navigate = useNavigate();
+  const [accountType, setAccountType] = useState("CUSTOMER");
+  const [form, setForm] = useState({
+    fullName: "", email: "", password: "", confirmPassword: "", tenantSlug: "",
+    storeName: "", domainSlug: "", businessName: ""
+  });
+  const [domains, setDomains] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadOptions() {
+      setLoadingOptions(true);
+      setOptionsError("");
+      const [domainResult, tenantResult] = await Promise.allSettled([api.domains(), api.publicTenants()]);
+      if (!active) return;
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError("Could not load business domains: " + (domainResult.reason?.message || "API request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        setOptionsError(previous => [previous, "Could not load stores: " + (tenantResult.reason?.message || "API request failed")].filter(Boolean).join(" "));
+      }
+      setLoadingOptions(false);
+    }
+    loadOptions();
+    return () => { active = false; };
+  }, []);
+
+  function updateField(event) {
+    setForm(previous => ({ ...previous, [event.target.name]: event.target.value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    if (form.fullName.trim().length < 2) {
+      setError("Enter your full name (at least 2 characters)."); return;
+    }
+    if (form.password.length < 8 || form.password.length > 72) {
+      setError("Password must contain between 8 and 72 characters."); return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Password and confirm password do not match."); return;
+    }
+    if (accountType === "TENANT_ADMIN" && (!form.storeName.trim() || !form.domainSlug)) {
+      setError("Enter the store name and select an available business domain."); return;
+    }
+    if (accountType === "VENDOR" && (!form.tenantSlug || !form.businessName.trim())) {
+      setError("Select the store you want to join and enter your business name."); return;
+    }
+
+    setLoading(true);
+    try {
+      if (accountType === "CUSTOMER") {
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+
+        });
+        setMessage("Customer account created. You can now sign in.");
+        window.setTimeout(() => navigate("/login", { replace: true }), 900);
+      } else if (accountType === "TENANT_ADMIN") {
+        // Step 1: create a standalone account with no tenant privileges.
+        await api.register({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        });
+        // Step 2: sign in with that same account before submitting the store application.
+        const session = await api.login({
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        });
+        localStorage.setItem("marketgrid_token", session.token);
+        localStorage.setItem("marketgrid_role", session.role);
+        localStorage.setItem("marketgrid_user_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_customer_id", String(session.userId ?? ""));
+        localStorage.setItem("marketgrid_tenant", String(session.tenantId ?? ""));
+        localStorage.setItem("marketgrid_email", session.email || form.email.trim().toLowerCase());
+        try {
+          await api.submitTenantApplication({
+            applicantName: form.fullName.trim(),
+            storeName: form.storeName.trim(),
+            requestedSlug: form.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+            requestedDomainSlug: form.domainSlug
+          });
+          navigate("/tenant-applicant", { replace: true });
+        } catch (applicationError) {
+          setError("Your account was created and signed in, but the application could not be submitted: " +
+            (applicationError.message || "Please submit it from your applicant dashboard."));
+          navigate("/tenant-applicant", { replace: true });
+        }
+      } else {
+        const registered = await api.registerVendor({
+  fullName: form.fullName.trim(),
+  email: form.email.trim().toLowerCase(),
+  tenantSlug: form.tenantSlug,
+  businessName: form.businessName.trim(),
+  password: form.password
+});
+
+const session = await api.login({
+  email: form.email.trim().toLowerCase(),
+  password: form.password,
+  tenantId: registered.tenantId
+});
+
+if (!session || !session.token || session.role !== "VENDOR") {
+  throw new Error("Registration succeeded, but automatic login failed. Please log in manually.");
+}
+
+localStorage.setItem("marketgrid_token", session.token);
+localStorage.setItem("marketgrid_role", session.role);
+localStorage.setItem("marketgrid_user_id", String(session.userId ?? ""));
+localStorage.setItem("marketgrid_customer_id", String(session.userId ?? ""));
+localStorage.setItem("marketgrid_tenant", String(session.tenantId ?? registered.tenantId));
+localStorage.setItem("marketgrid_email", session.email || form.email.trim().toLowerCase());
+
+navigate("/vendor", { replace: true });
+      }
+    } catch (err) {
+      setError(err.message || "Registration could not be completed. Please check your details.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Treat a domain as available only when the API confirms it is unallocated.
+  // The allocatedTenantId fallback supports older API responses that omit "available".
+  const availableDomains = domains.filter(domain =>
+    domain.available === true ||
+    (domain.available == null && domain.allocatedTenantId == null)
+  );
+  const activeTenants = tenants.filter(tenant => tenant.active);
+
+  async function refreshRegistrationOptions() {
+    setLoadingOptions(true);
+    setOptionsError("");
+    try {
+      const [domainResult, tenantResult] = await Promise.allSettled([
+        api.domains(),
+        api.publicTenants()
+      ]);
+      const errors = [];
+      if (domainResult.status === "fulfilled") {
+        const value = domainResult.value;
+        setDomains(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Business domains: " + (domainResult.reason?.message || "request failed"));
+      }
+      if (tenantResult.status === "fulfilled") {
+        const value = tenantResult.value;
+        setTenants(Array.isArray(value) ? value : Array.isArray(value?.content) ? value.content : []);
+      } else {
+        errors.push("Active stores: " + (tenantResult.reason?.message || "request failed"));
+      }
+      setOptionsError(errors.join(". "));
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <div className="brand-mark">M</div>
+          <div><strong>MarketGrid</strong><span>Marketplace Platform</span></div>
+        </div>
+
+        <h1>Create your account</h1>
+        <p className="muted">Choose how you want to join MarketGrid.</p>
+
+        <form onSubmit={submit} className="auth-form">
+          <div className="register-role-switch" role="group" aria-label="Choose account type">
+            <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
+              aria-pressed={accountType === "CUSTOMER"}
+              onClick={() => { setAccountType("CUSTOMER"); setError(""); setMessage(""); }}>
+              <UserRound className="register-role-icon" size={23}/><span>Customer</span>
+            </button>
+            <button type="button" className={accountType === "VENDOR" ? "active" : ""}
+              aria-pressed={accountType === "VENDOR"}
+              onClick={() => { setAccountType("VENDOR"); setError(""); setMessage(""); }}>
+              <StoreIcon className="register-role-icon" size={23}/><span>Vendor</span>
+            </button>
+            <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
+              aria-pressed={accountType === "TENANT_ADMIN"}
+              onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); setMessage(""); }}>
+              <Building2 className="register-role-icon" size={23}/><span>Tenant</span>
+            </button>
+          </div>
+
+          <label>
+            Full Name
+            <input name="fullName" value={form.fullName} onChange={updateField}
+              autoComplete="name" placeholder="Enter your full name" minLength="2" required />
+          </label>
+
+          <label>
+            Email
+            <input type="email" name="email" value={form.email} onChange={updateField}
+              autoComplete="email" placeholder="you@example.com" required />
+          </label>
+
+          {accountType === "CUSTOMER" && <>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
+            </label>
+          </>}
+
+          {accountType !== "CUSTOMER" && <>
+            <label>
+              Password
+              <input type="password" name="password" value={form.password} onChange={updateField}
+                autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
+            </label>
+            <label>
+              Confirm Password
+              <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                autoComplete="new-password" placeholder="Re-enter your password" minLength="8" maxLength="72" required />
+            </label>
+          </>}
+
+          {accountType === "VENDOR" && <>
+            <label>
+              Store you want to join
+              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading stores..." : "Select an active store"}</option>
+                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name}</option>)}
+              </select>
+            </label>
+            <label>
+              Business Name
+              <input name="businessName" value={form.businessName} onChange={updateField}
+                placeholder="Your shop or business name" required />
+            </label>
+            <p className="muted">Your vendor account will be created immediately for the selected active store.</p>
+          </>}
+
+          {accountType === "TENANT_ADMIN" && <>
+            <label>
+              Store Name
+              <input name="storeName" value={form.storeName} onChange={updateField}
+                placeholder="Name of your store" required />
+            </label>
+            <label>
+              Business Domain
+              <select name="domainSlug" value={form.domainSlug} onChange={updateField} required disabled={loadingOptions}>
+                <option value="">{loadingOptions ? "Loading domains..." : availableDomains.length ? "Select an available domain" : "No available domains"}</option>
+                {availableDomains.map(domain => <option key={domain.id} value={domain.slug}>{domain.name}</option>)}
+              </select>
+              {!loadingOptions && optionsError && (
+                <small className="auth-inline-error">
+                  {optionsError}. Check that Tenant Service and API Gateway are running.
+                </small>
+              )}
+              {!loadingOptions && !optionsError && availableDomains.length === 0 && (
+                <small>No available domains yet. Super Admin must create a domain in Admin → Tenants.</small>
+              )}
+              {!loadingOptions && availableDomains.length > 0 && (
+                <small>{availableDomains.length} domain(s) available to request.</small>
+              )}
+              <button
+                type="button"
+                className="auth-text-button"
+                onClick={refreshRegistrationOptions}
+                disabled={loadingOptions}
+              >
+                {loadingOptions ? "Checking availability..." : "Refresh available domains"}
+              </button>
+            </label>
+            <p className="muted">Your store will be created only after Super Admin approval.</p>
+          </>}
+
+          {error && <div className="error-box" role="alert">{error}</div>}
+          {message && <div className="info-box" role="status">{message}</div>}
+
+          <button className="primary-btn full" type="submit" disabled={loading || loadingOptions}>
+            {loading ? "Submitting..." : accountType === "CUSTOMER" ? "Create Customer Account" :
+              accountType === "VENDOR" ? "Register as Vendor" : "Submit Store Application"}
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          Platform Super Admin accounts are provisioned securely and cannot be created through public registration.
+        </p>
+        <p className="auth-footer">Already registered? <Link to="/login">Sign in</Link></p>
+      </div>
+    </div>
+  );
+}
+
+function CustomerDashboard() {
+  const { role } = useAuth();
+  const navigate = useNavigate();
+  const cartCount = useCartCount();
+
+  const email = localStorage.getItem("marketgrid_email") || "";
+  const customerName = formatDisplayName(email);
+
+  const [products, setProducts] = useState([]);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadRecommendations() {
+      try {
+        const [catalog, vendors, orders] = await Promise.all([api.products(), api.vendors(), api.orders()]);
+        const vendorNames = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const items = (Array.isArray(catalog) ? catalog : [])
+          .filter(product => String(product.status || "ACTIVE").toUpperCase() === "ACTIVE")
+          .slice(0, 4)
+          .map(product => ({
+            id: product.id,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorNames.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            vendorId: product.vendorId,
+            price: Number(product.price || 0),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) {
+          setProducts(items);
+          setCustomerOrders(Array.isArray(orders) ? orders : []);
+        }
+      } catch (error) {
+        if (active) setCatalogError(error.message || "Could not load recommended products.");
+      } finally {
+        if (active) setCatalogLoading(false);
+      }
+    }
+    loadRecommendations();
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <div className="content">
+
+      <div
+        style={{
+          background: "linear-gradient(135deg,#172554,#2563eb)",
+          borderRadius: "22px",
+          padding: "34px",
+          color: "#fff",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "25px",
+          flexWrap: "wrap",
+          marginBottom: "24px"
+        }}
+      >
+        <div>
+          <div
+            style={{
+              color: "#bfdbfe",
+              fontSize: "12px",
+              fontWeight: "800",
+              letterSpacing: "3px"
+            }}
+          >
+            CUSTOMER PORTAL
+          </div>
+
+          <h1
+            style={{
+              color: "#fff",
+              margin: "10px 0 8px"
+            }}
+          >
+            Welcome back, {customerName} Ã°Å¸â€˜â€¹
+          </h1>
+
+          <p
+            style={{
+              color: "#dbeafe",
+              margin: 0,
+              fontSize: "16px"
+            }}
+          >
+            Discover products, manage your orders and enjoy a seamless
+            shopping experience.
+          </p>
+        </div>
+
+        <button
+          className="primary-btn"
+          onClick={() => navigate("/shop/products")}
+          style={{
+            background: "#fff",
+            color: "#2563eb",
+            border: "none"
+          }}
+        >
+          <ShoppingCart size={17}/>
+          Start Shopping
+        </button>
+      </div>
+
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+          gap: "18px",
+          marginBottom: "28px"
+        }}
+      >
+
+        {[
+          [Package, "Orders", catalogLoading ? "—" : customerOrders.length, "View your purchases"],
+          [ShoppingCart, "Cart Items", cartCount, "Items waiting for checkout"],
+          [Eye, "Wishlist", "Coming soon", "Wishlist module not connected"],
+          [Truck, "Saved Addresses", "Coming soon", "Address book module not connected"]
+        ].map(([Icon, label, value, note]) => (
+
+          <div
+            key={label}
+            style={{
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "18px",
+              padding: "22px",
+              boxShadow: "0 8px 24px rgba(15,23,42,.04)"
+            }}
+          >
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <span style={{color:"#64748b"}}>
+                {label}
+              </span>
+
+              <Icon
+                size={21}
+                color="#2563eb"
+              />
+            </div>
+
+            <strong
+              style={{
+                display: "block",
+                fontSize: "32px",
+                marginTop: "14px",
+                color: "#0f172a"
+              }}
+            >
+              {value}
+            </strong>
+
+            <small style={{color:"#94a3b8"}}>
+              {note}
+            </small>
+
+          </div>
+
+        ))}
+
+      </div>
+
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "230px minmax(0,1fr)",
+          gap: "28px",
+          alignItems: "start"
+        }}
+      >
+
+        <aside
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "18px",
+            padding: "22px"
+          }}
+        >
+
+          <div
+            style={{
+              color:"#2563eb",
+              fontSize:"12px",
+              fontWeight:"800",
+              letterSpacing:"2px",
+              marginBottom:"15px"
+            }}
+          >
+            MY ACCOUNT
+          </div>
+
+          {[
+            [LayoutDashboard, "Dashboard", "/shop"],
+            [Package, "Browse Products", "/shop/products"],
+            [Store, "Vendors", "/vendors"],
+            [ShoppingCart, "My Cart", "/cart"],
+            [Truck, "My Orders", "/orders"]
+          ].map(([Icon, text, path]) => (
+
+            <button
+              key={text}
+              onClick={() => navigate(path)}
+              style={{
+                width:"100%",
+                display:"flex",
+                alignItems:"center",
+                gap:"10px",
+                padding:"12px 10px",
+                border:"none",
+                background:"transparent",
+                borderRadius:"10px",
+                cursor:"pointer",
+                color:"#475569",
+                textAlign:"left",
+                fontSize:"14px",
+                marginBottom:"4px"
+              }}
+            >
+              <Icon size={17}/>
+              {text}
+            </button>
+
+          ))}
+
+        </aside>
+
+
+        <main>
+
+          <div
+            style={{
+              display:"flex",
+              justifyContent:"space-between",
+              alignItems:"end",
+              marginBottom:"18px"
+            }}
+          >
+
+            <div>
+              <div
+                style={{
+                  color:"#2563eb",
+                  fontSize:"12px",
+                  fontWeight:"800",
+                  letterSpacing:"2px"
+                }}
+              >
+                DISCOVER
+              </div>
+
+              <h2
+                style={{
+                  margin:"6px 0 0",
+                  fontSize:"28px"
+                }}
+              >
+                Recommended for you
+              </h2>
+
+              <p
+                style={{
+                  color:"#64748b",
+                  margin:"6px 0 0"
+                }}
+              >
+                Popular products from our marketplace vendors.
+              </p>
+            </div>
+
+            <button
+              className="secondary-btn"
+              onClick={() => navigate("/shop/products")}
+            >
+              View All
+              <ChevronRight size={16}/>
+            </button>
+
+          </div>
+
+
+          <div
+            style={{
+              display:"grid",
+              gridTemplateColumns:"repeat(4,minmax(0,1fr))",
+              gap:"18px"
+            }}
+          >
+
+            {catalogLoading && <p>Loading products from this store...</p>}
+            {catalogError && <p className="error-box" role="alert">{catalogError}</p>}
+            {!catalogLoading && !catalogError && products.length === 0 && <p>No active products are available in this store yet.</p>}
+            {products.map(product => (
+
+              <div
+                key={product.id}
+                style={{
+                  background:"#fff",
+                  border:"1px solid #e2e8f0",
+                  borderRadius:"18px",
+                  overflow:"hidden",
+                  boxShadow:"0 8px 24px rgba(15,23,42,.04)"
+                }}
+              >
+
+                <div
+                  style={{
+                    height:"170px",
+                    background:"#f1f5f9",
+                    overflow:"hidden"
+                  }}
+                >
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    style={{
+                      width:"100%",
+                      height:"100%",
+                      objectFit:"cover",
+                      display:"block"
+                    }}
+                  />
+                </div>
+
+                <div style={{padding:"17px"}}>
+
+                  <div
+                    style={{
+                      fontSize:"12px",
+                      color:"#64748b",
+                      marginBottom:"5px"
+                    }}
+                  >
+                    {product.vendor}
+                  </div>
+
+                  <h3
+                    style={{
+                      margin:"0 0 12px",
+                      fontSize:"17px"
+                    }}
+                  >
+                    {product.name}
+                  </h3>
+
+                  <div
+                    style={{
+                      display:"flex",
+                      justifyContent:"space-between",
+                      alignItems:"center",
+                      marginBottom:"14px"
+                    }}
+                  >
+
+                    <strong style={{fontSize:"18px"}}>
+                      &#8377;{product.price.toLocaleString("en-IN")}
+                    </strong>
+
+                    <span
+                      style={{
+                        color:"#16a34a",
+                        fontSize:"12px",
+                        fontWeight:"700"
+                      }}
+                    >
+                      {product.stock} in stock
+                    </span>
+
+                  </div>
+
+                  <button
+                    className="primary-btn"
+                    style={{
+                      width:"100%",
+                      justifyContent:"center"
+                    }}
+                    onClick={() => navigate("/shop/products")}
+                  >
+                    <Eye size={16}/>
+                    View Product
+                  </button>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+
+          <div
+            style={{
+              display:"grid",
+              gridTemplateColumns:"repeat(3,minmax(0,1fr))",
+              gap:"18px",
+              marginTop:"28px"
+            }}
+          >
+
+            {[
+              [Truck,"Track Orders","Check order status and follow deliveries from different vendors.","View Orders","/orders"],
+              [ShoppingCart,"Multi-Vendor Checkout","Purchase products from multiple vendors through one checkout.","Open Cart","/cart"],
+              [Store,"Trusted Vendors","Explore vendors and review seller information.","Explore Vendors","/vendors"]
+            ].map(([Icon,title,text,action,path]) => (
+
+              <div
+                key={title}
+                style={{
+                  background:"#fff",
+                  border:"1px solid #e2e8f0",
+                  borderRadius:"18px",
+                  padding:"22px"
+                }}
+              >
+
+                <div
+                  style={{
+                    width:"46px",
+                    height:"46px",
+                    borderRadius:"12px",
+                    background:"#eff6ff",
+                    color:"#2563eb",
+                    display:"flex",
+                    alignItems:"center",
+                    justifyContent:"center",
+                    marginBottom:"15px"
+                  }}
+                >
+                  <Icon size={23}/>
+                </div>
+
+                <h3 style={{margin:"0 0 8px"}}>
+                  {title}
+                </h3>
+
+                <p
+                  style={{
+                    color:"#64748b",
+                    lineHeight:"1.6",
+                    minHeight:"50px"
+                  }}
+                >
+                  {text}
+                </p>
+
+                <button
+                  onClick={() => navigate(path)}
+                  style={{
+                    border:"none",
+                    background:"transparent",
+                    color:"#2563eb",
+                    fontWeight:"700",
+                    cursor:"pointer",
+                    padding:"8px 0",
+                    display:"flex",
+                    alignItems:"center",
+                    gap:"5px"
+                  }}
+                >
+                  {action}
+                  <ChevronRight size={16}/>
+                </button>
+
+              </div>
+
+            ))}
+
+          </div>
+
+
+          <div
+            style={{
+              marginTop:"28px",
+              padding:"28px",
+              borderRadius:"18px",
+              background:"#eff6ff",
+              border:"1px solid #dbeafe",
+              display:"flex",
+              justifyContent:"space-between",
+              alignItems:"center",
+              gap:"20px",
+              flexWrap:"wrap"
+            }}
+          >
+
+            <div>
+              <div
+                style={{
+                  color:"#2563eb",
+                  fontSize:"12px",
+                  fontWeight:"800",
+                  letterSpacing:"2px"
+                }}
+              >
+                NEED HELP?
+              </div>
+
+              <h2 style={{margin:"8px 0"}}>
+                We're here to help
+              </h2>
+
+              <p
+                style={{
+                  color:"#64748b",
+                  margin:0
+                }}
+              >
+                Need assistance with an order, product or seller?
+                Our support team is ready to help.
+              </p>
+            </div>
+
+            <button className="secondary-btn">
+              <ShieldCheck size={17}/>
+              Contact Support
+            </button>
+
+          </div>
+
+        </main>
+
+      </div>
+
+    </div>
+  );
+}
+function Home() {
+  return (
+    <div className="landing">
+      <section className="hero">
+        <div className="hero-copy">
+          <p className="eyebrow">SMART MULTI-VENDOR COMMERCE</p>
+          <h1>One marketplace.<br/><span>Thousands of possibilities.</span></h1>
+          <p>Discover products from trusted vendors, compare offers, manage your cart and track every order from one intelligent marketplace.</p>
+          <div className="hero-actions">
+            <Link className="primary-btn" to="/shop">Explore Products <ChevronRight size={18}/></Link>
+            <Link className="secondary-btn" to="/vendors">Browse Vendors</Link>
+          </div>
+          <div className="trust-row">
+            <span><ShieldCheck size={17}/> Secure JWT Authentication</span>
+            <span><Truck size={17}/> Order Tracking</span>
+            <span><Store size={17}/> Verified Vendors</span>
+          </div>
+        </div>
+        <div className="hero-visual">
+          <div className="orbit-card"><Package size={34}/><b>Multi-vendor checkout</b><small>One order  multiple sellers</small></div>
+          <div className="market-orbit"><div className="orbit-center"><Boxes size={54}/></div><b>MARKETGRID</b></div>
+          <div className="orbit-card lower"><BarChart3 size={28}/><b>Live marketplace</b><small>Products  Vendors  Orders</small></div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CustomerShop() {
+  const cartCount = useCartCount();
+  const navigate = useNavigate();
+
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
+  const [addedId, setAddedId] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCatalog() {
+      setProductsLoading(true);
+      setProductsError("");
+      try {
+        const [catalog, vendors] = await Promise.all([
+          api.products(),
+          api.vendors()
+        ]);
+        const vendorById = new Map(
+          (Array.isArray(vendors) ? vendors : []).map(vendor => [
+            Number(vendor.id),
+            vendor.businessName || vendor.vendorName || `Vendor #${vendor.id}`
+          ])
+        );
+        const liveProducts = (Array.isArray(catalog) ? catalog : [])
+          .filter(product =>
+            String(product.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          )
+          .map(product => ({
+            id: product.id,
+            vendorId: product.vendorId,
+            tenantId: product.tenantId,
+            name: product.productName || product.name || `Product #${product.id}`,
+            vendor: vendorById.get(Number(product.vendorId)) || `Vendor #${product.vendorId}`,
+            price: Number(product.price),
+            stock: Number(product.stockQuantity ?? product.stock ?? 0),
+            status: product.status || "ACTIVE",
+            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+          }));
+        if (active) setProducts(liveProducts);
+      } catch (error) {
+        if (active) setProductsError(error.message || "Could not load products from the marketplace.");
+      } finally {
+        if (active) setProductsLoading(false);
+      }
+    }
+
+    loadCatalog();
+    return () => { active = false; };
+  }, []);
+
+  function addToCart(product) {
+    if (product.stock <= 0) return;
+
+    const cart = getStoredCart();
+    const existing = cart.find(item => item.id === product.id);
+
+    if (existing) {
+      existing.quantity = (existing.quantity || 1) + 1;
+    } else {
+      cart.push({
+        ...product,
+        quantity: 1
+      });
+    }
+
+    saveCart(cart);
+
+    setProducts(prev =>
+      prev.map(item =>
+        item.id === product.id
+          ? {
+              ...item,
+              stock: item.stock - 1,
+              status: item.stock - 1 === 0 ? "Out of Stock" : "Available"
+            }
+          : item
+      )
+    );
+
+    setAddedId(product.id);
+
+    setTimeout(() => {
+      setAddedId(current => current === product.id ? null : current);
+    }, 700);
+  }
+
+  return (
+    <div className="content">
+
+      <PageHead
+        eyebrow="CUSTOMER MARKETPLACE"
+        title="Discover products"
+        description="Compare products from independent vendors in one secure marketplace."
+        action={
+          <Link className="primary-btn" to="/cart">
+            <ShoppingCart size={17}/> Cart ({cartCount})
+          </Link>
+        }
+      />
+
+      <div className="filterbar">
+
+        <div className="search-control">
+          <Search size={17}/>
+          <input placeholder="Search products..." />
+        </div>
+
+        <button className="filter">All Categories</button>
+        <button className="filter">Sort: Popular</button>
+
+      </div>
+
+      {productsLoading && <div className="empty-card">Loading products from this store...</div>}
+      {productsError && <div className="info-box">{productsError}</div>}
+      {!productsLoading && !productsError && products.length === 0 && (
+        <div className="empty-card">
+          <Package size={36}/>
+          <h2>No active products yet</h2>
+          <p>This tenant does not currently have products available for sale.</p>
+        </div>
+      )}
+
+      <div className="product-grid">
+
+        {products.map(p => (
+
+          <div className="product-card" key={p.id}>
+
+            <div
+              className="product-image"
+              style={{
+                padding: "0",
+                overflow: "hidden",
+                background: "#f1f5f9"
+              }}
+            >
+              <img
+                src={p.image}
+                alt={p.name}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block"
+                }}
+              />
+            </div>
+
+            <span className={`badge ${p.stock > 0 ? "green" : "red"}`}>
+              {p.stock > 0 ? "Available" : "Out of Stock"}
+            </span>
+
+            <h3>{p.name}</h3>
+
+            <p>{p.vendor}</p>
+
+            <strong className="price">
+              &#8377;{p.price.toLocaleString("en-IN")}
+            </strong>
+
+            <div style={{ marginTop: "8px" }}>
+
+              <small>
+                {p.stock > 0
+                  ? `${p.stock} units available`
+                  : "Currently unavailable"}
+              </small>
+
+              <div
+                style={{
+                  height: "6px",
+                  background: "#e5e7eb",
+                  borderRadius: "10px",
+                  marginTop: "6px",
+                  overflow: "hidden"
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(p.stock * 2.5, 100)}%`,
+                    height: "100%",
+                    background: p.stock > 0 ? "#2563eb" : "#94a3b8",
+                    borderRadius: "10px",
+                    transition: "width .3s ease"
+                  }}
+                />
+              </div>
+
+            </div>
+
+            <div className="card-row">
+
+              <button
+                className="secondary-btn small"
+                onClick={() => navigate(`/products/${p.id}`)}
+              >
+                <Eye size={15}/> View
+              </button>
+
+              <button
+                className="primary-btn small"
+                disabled={p.stock <= 0}
+                onClick={() => addToCart(p)}
+                style={{
+                  transform: addedId === p.id ? "scale(.94)" : "scale(1)",
+                  opacity: p.stock <= 0 ? 0.55 : 1,
+                  transition: "transform .12s ease, opacity .2s ease",
+                  background: addedId === p.id ? "#16a34a" : undefined
+                }}
+              >
+                <ShoppingCart size={15}/>
+                {addedId === p.id ? "Added ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : p.stock <= 0 ? "Sold Out" : "Add"}
+              </button>
+
+            </div>
+
+          </div>
+
+        ))}
+
+      </div>
+
+    </div>
+  );
+}
+function Cart() {
+  const navigate = useNavigate();
+  const [cart, setCart] = useState(() => getStoredCart());
+
+  useEffect(() => {
+    const update = () => setCart(getStoredCart());
+
+    window.addEventListener("marketgrid_cart_updated", update);
+    window.addEventListener("storage", update);
+
+    return () => {
+      window.removeEventListener("marketgrid_cart_updated", update);
+      window.removeEventListener("storage", update);
+    };
+  }, []);
+
+  function removeItem(id) {
+    const updated = cart.filter(item => item.id !== id);
+    saveCart(updated);
+    setCart(updated);
+  }
+
+  function changeQuantity(id, amount) {
+    const updated = cart.map(item => {
+      if (item.id !== id) return item;
+
+      return {
+        ...item,
+        quantity: Math.max(1, (item.quantity || 1) + amount)
+      };
+    });
+
+    saveCart(updated);
+    setCart(updated);
+  }
+
+  function clearCart() {
+    saveCart([]);
+    setCart([]);
+  }
+
+  const total = cart.reduce(
+    (sum, item) => sum + item.price * (item.quantity || 1),
+    0
+  );
+
+  if (cart.length === 0) {
+    return (
+      <div className="content narrow">
+
+        <PageHead
+          eyebrow="SHOPPING CART"
+          title="Your cart"
+          description="Review your selected products before checkout."
+        />
+
+        <div className="empty-card">
+
+          <ShoppingCart size={48}/>
+
+          <h2>Your cart is empty</h2>
+
+          <p>
+            Add products from the marketplace to begin your order.
+          </p>
+
+          <Link
+            className="primary-btn"
+            to="/shop/products"
+          >
+            Continue Shopping
+          </Link>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  return (
+    <div className="content narrow">
+
+      <PageHead
+        eyebrow="SHOPPING CART"
+        title="Your cart"
+        description={`${cart.length} product(s) selected.`}
+      />
+
+      <div className="table-card">
+
+        <div className="table-head">
+
+          <div>
+            <b>Selected Products</b>
+            <small>Review your products before checkout.</small>
+          </div>
+
+          <button
+            className="secondary-btn small"
+            onClick={clearCart}
+          >
+            <Trash2 size={15}/>
+            Clear Cart
+          </button>
+
+        </div>
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>PRODUCT</th>
+              <th>VENDOR</th>
+              <th>PRICE</th>
+              <th>QUANTITY</th>
+              <th>TOTAL</th>
+              <th></th>
+            </tr>
+          </thead>
+
+          <tbody>
+
+            {cart.map(item => {
+
+              const quantity = item.quantity || 1;
+              const itemTotal = item.price * quantity;
+
+              return (
+                <tr key={item.id}>
+
+                  <td>
+                    <b>{item.name}</b>
+                  </td>
+
+                  <td>{item.vendor}</td>
+
+                  <td>
+                    {formatINR(item.price)}
+                  </td>
+
+                  <td>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                    >
+
+                      <button
+                        className="icon-btn"
+                        onClick={() =>
+                          changeQuantity(item.id, -1)
+                        }
+                      >
+                        -
+                      </button>
+
+                      <b>{quantity}</b>
+
+                      <button
+                        className="icon-btn"
+                        onClick={() =>
+                          changeQuantity(item.id, 1)
+                        }
+                      >
+                        +
+                      </button>
+
+                    </div>
+
+                  </td>
+
+                  <td>
+                    <b>
+                      {formatINR(itemTotal)}
+                    </b>
+                  </td>
+
+                  <td>
+
+                    <button
+                      className="icon-btn"
+                      onClick={() => removeItem(item.id)}
+                      title="Remove product"
+                    >
+                      <Trash2 size={16}/>
+                    </button>
+
+                  </td>
+
+                </tr>
+              );
+
+            })}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+      <div
+        className="panel"
+        style={{
+          marginTop: "20px",
+          padding: "24px"
+        }}
+      >
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "20px",
+            flexWrap: "wrap"
+          }}
+        >
+
+          <div>
+
+            <small>Cart Total</small>
+
+            <h2 style={{ margin: "5px 0" }}>
+              {formatINR(total)}
+            </h2>
+
+          </div>
+
+          <div className="action-row">
+
+            <button
+              className="secondary-btn"
+              onClick={() => navigate("/shop/products")}
+            >
+              Continue Shopping
+            </button>
+
+            <button
+              className="primary-btn"
+              onClick={() => navigate("/checkout")}
+            >
+              Proceed to Checkout
+              <ChevronRight size={17}/>
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+function Checkout() {
+  const navigate = useNavigate();
+  const [cart, setCart] = useState(() => getStoredCart());
+  const [paymentMethod, setPaymentMethod] = useState("UPI");
+  const [processing, setProcessing] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [transactionId, setTransactionId] = useState("");
+
+  const [form, setForm] = useState({
+    fullName: "",
+    phone: "",
+    address: "",
+    city: "",
+    pincode: ""
+  });
+
+  const subtotal = cart.reduce(
+    (sum, item) => sum + item.price * (item.quantity || 1),
+    0
+  );
+
+  const delivery = 0;
+  const total = subtotal + delivery;
+
+  function updateForm(e) {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+  }
+
+  const [checkoutError, setCheckoutError] = useState("");
+  const [orderId, setOrderId] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState("SUCCESS");
+  const [orderTotal, setOrderTotal] = useState(null);
+
+  async function placeOrder() {
+    setCheckoutError("");
+
+    if (
+      !form.fullName.trim() ||
+      !form.phone.trim() ||
+      !/^\d{10}$/.test(form.phone.trim()) ||
+      !form.address.trim() ||
+      !form.city.trim() ||
+      !/^\d{6}$/.test(form.pincode.trim())
+    ) {
+      setCheckoutError("Enter your name, a valid 10-digit phone number, address, city, and 6-digit pincode.");
+      return;
+    }
+
+    if (cart.length === 0) {
+      setCheckoutError("Your cart is empty.");
+      navigate("/shop/products");
+      return;
+    }
+
+    if (!localStorage.getItem("marketgrid_token")) {
+      setCheckoutError("Please sign in before placing an order.");
+      navigate("/login");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const tenantId = localStorage.getItem("marketgrid_tenant");
+      const customerId = localStorage.getItem("marketgrid_user_id");
+      const storedPending = JSON.parse(
+        localStorage.getItem("marketgrid_pending_checkout") || "null"
+      );
+      let order = null;
+
+      if (
+        storedPending?.orderId &&
+        String(storedPending.tenantId) === String(tenantId) &&
+        String(storedPending.customerId) === String(customerId)
+      ) {
+        order = await api.order(storedPending.orderId);
+      } else {
+        order = await api.createOrder({
+          deliveryName: form.fullName.trim(),
+          deliveryPhone: form.phone.trim(),
+          deliveryAddress: form.address.trim(),
+          deliveryCity: form.city.trim(),
+          deliveryPincode: form.pincode.trim(),
+          items: cart.map(item => ({
+            productId: Number(item.id),
+            vendorId: Number(item.vendorId),
+            quantity: Number(item.quantity || 1)
+          }))
+        });
+        if (!order?.id) {
+          throw new Error("The order service did not return an order ID.");
+        }
+        localStorage.setItem("marketgrid_pending_checkout", JSON.stringify({
+          orderId: order.id,
+          tenantId,
+          customerId
+        }));
+      }
+
+      setOrderId(order.id);
+      setOrderTotal(Number(order.totalAmount ?? total));
+      const payment = await api.createPayment({
+        orderId: order.id,
+        paymentMethod
+      });
+
+      const status = String(payment?.paymentStatus || "").toUpperCase();
+      if (!["SUCCESS", "PENDING"].includes(status)) {
+        throw new Error("The payment service returned an unexpected payment status.");
+      }
+
+      const confirmedMethod = payment.paymentMethod || paymentMethod;
+      setPaymentStatus(status);
+      setPaymentMethod(confirmedMethod);
+      setTransactionId(payment.transactionId || "Payment due on delivery");
+      setProcessing(false);
+      setSuccess(true);
+
+      localStorage.setItem("marketgrid_last_order", JSON.stringify({
+        orderId: order.id,
+        items: cart,
+        total: Number(order.totalAmount ?? total),
+        paymentMethod: payment.paymentMethod || paymentMethod,
+        paymentStatus: status,
+        transactionId: payment.transactionId || null,
+        delivery: form,
+        createdAt: new Date().toISOString()
+      }));
+      localStorage.removeItem("marketgrid_pending_checkout");
+      saveCart([]);
+    } catch (error) {
+      setCheckoutError(
+        error.message ||
+        "Could not complete checkout. Your cart has been kept so you can retry."
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="checkout-page">
+        <div className="checkout-success">
+
+          <div className="success-icon">
+            
+          </div>
+
+          <span className="checkout-eyebrow">
+            ORDER CONFIRMED
+          </span>
+
+          <h1>{paymentStatus === "PENDING" ? "Order Confirmed — Pay on Delivery" : "Payment Successful"}</h1>
+
+          <p>
+            {paymentStatus === "PENDING"
+              ? "Your order has been placed. Payment is due when the order arrives."
+              : "Your order has been placed and the demo payment has been recorded."}
+          </p>
+
+          <div className="success-details">
+            <div>
+              <span>Order ID / Transaction</span>
+              <strong>{orderId} / {transactionId}</strong>
+            </div>
+
+            <div>
+              <span>Payment Method</span>
+              <strong>{paymentMethod}</strong>
+            </div>
+
+            <div>
+              <span>Amount Paid</span>
+              <strong>
+                {formatINR(orderTotal ?? total)}
+              </strong>
+            </div>
+          </div>
+
+          <div className="success-actions">
+            <button
+              className="primary-btn"
+              onClick={() => navigate("/orders")}
+            >
+              View My Orders
+            </button>
+
+            <button
+              className="secondary-btn"
+              onClick={() => navigate("/shop/products")}
+            >
+              Continue Shopping
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="checkout-page">
+
+      <div className="checkout-header">
+
+        <div>
+          <span className="checkout-eyebrow">
+            SECURE CHECKOUT
+          </span>
+
+          <h1>Complete your order</h1>
+
+          <p>
+            Enter your delivery details and choose your preferred payment method.
+          </p>
+        </div>
+
+        <div className="checkout-security">
+          <ShieldCheck size={19}/>
+          <span>Secure checkout</span>
+        </div>
+
+      </div>
+
+      <div className="checkout-steps">
+
+        <div className="checkout-step active">
+          <span>1</span>
+          <div>
+            <strong>Delivery</strong>
+            <small>Address details</small>
+          </div>
+        </div>
+
+        <div className="step-line"></div>
+
+        <div className="checkout-step active">
+          <span>2</span>
+          <div>
+            <strong>Payment</strong>
+            <small>Choose method</small>
+          </div>
+        </div>
+
+        <div className="step-line"></div>
+
+        <div className="checkout-step">
+          <span>3</span>
+          <div>
+            <strong>Confirmation</strong>
+            <small>Order placed</small>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="checkout-grid">
+
+        <div className="checkout-main">
+
+          <section className="checkout-card">
+
+            <div className="checkout-card-title">
+              <div className="checkout-title-icon">
+                <Truck size={20}/>
+              </div>
+
+              <div>
+                <h2>Delivery Information</h2>
+                <p>Where should we deliver your order?</p>
+              </div>
+            </div>
+
+            <div className="checkout-form">
+
+              <div className="checkout-field full">
+                <label>Full Name</label>
+                <input
+                  name="fullName"
+                  value={form.fullName}
+                  onChange={updateForm}
+                  placeholder="Enter your full name"
+                />
+              </div>
+
+              <div className="checkout-field">
+                <label>Phone Number</label>
+                <input
+                  name="phone"
+                  value={form.phone}
+                  onChange={updateForm}
+                  placeholder="10-digit mobile number"
+                  maxLength="10"
+                />
+              </div>
+
+              <div className="checkout-field">
+                <label>City</label>
+                <input
+                  name="city"
+                  value={form.city}
+                  onChange={updateForm}
+                  placeholder="Enter city"
+                />
+              </div>
+
+              <div className="checkout-field full">
+                <label>Delivery Address</label>
+                <textarea
+                  name="address"
+                  value={form.address}
+                  onChange={updateForm}
+                  placeholder="House number, street, area"
+                  rows="4"
+                />
+              </div>
+
+              <div className="checkout-field">
+                <label>Pincode</label>
+                <input
+                  name="pincode"
+                  value={form.pincode}
+                  onChange={updateForm}
+                  placeholder="6-digit pincode"
+                  maxLength="6"
+                />
+              </div>
+
+            </div>
+
+          </section>
+
+          <section className="checkout-card">
+
+            <div className="checkout-card-title">
+              <div className="checkout-title-icon">
+                <CreditCard size={20}/>
+              </div>
+
+              <div>
+                <h2>Payment Method</h2>
+                <p>Select how you would like to pay.</p>
+              </div>
+            </div>
+
+            <div className="payment-options">
+
+              <button
+                type="button"
+                className={`payment-option ${paymentMethod === "UPI" ? "selected" : ""}`}
+                onClick={() => setPaymentMethod("UPI")}
+              >
+                <div className="payment-icon">UPI</div>
+                <div>
+                  <strong>UPI</strong>
+                  <span>Google Pay, PhonePe, Paytm</span>
+                </div>
+                <div className="payment-radio">
+                  {paymentMethod === "UPI" ? "" : ""}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className={`payment-option ${paymentMethod === "CARD" ? "selected" : ""}`}
+                onClick={() => setPaymentMethod("CARD")}
+              >
+                <div className="payment-icon">
+                  <CreditCard size={20}/>
+                </div>
+                <div>
+                  <strong>Card</strong>
+                  <span>Credit / Debit Card</span>
+                </div>
+                <div className="payment-radio">
+                  {paymentMethod === "CARD" ? "" : ""}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className={`payment-option ${paymentMethod === "COD" ? "selected" : ""}`}
+                onClick={() => setPaymentMethod("COD")}
+              >
+                <div className="payment-icon">
+                  <Truck size={20}/>
+                </div>
+                <div>
+                  <strong>Cash on Delivery</strong>
+                  <span>Pay when your order arrives</span>
+                </div>
+                <div className="payment-radio">
+                  {paymentMethod === "COD" ? "" : ""}
+                </div>
+              </button>
+
+            </div>
+
+            {paymentMethod === "UPI" && (
+              <div className="demo-payment-box">
+                <strong>UPI Payment</strong>
+                <span>Demo payment mode  no real money is charged.</span>
+                <input placeholder="Enter UPI ID (example@upi)" />
+              </div>
+            )}
+
+            {paymentMethod === "CARD" && (
+              <div className="demo-payment-box">
+                <strong>Card Payment</strong>
+                <span>Demo payment mode  no real money is charged.</span>
+                <input placeholder="Card number" />
+              </div>
+            )}
+
+            {paymentMethod === "COD" && (
+              <div className="demo-payment-box">
+                <strong>Cash on Delivery</strong>
+                <span>
+                  Pay the delivery partner when your order arrives.
+                </span>
+              </div>
+            )}
+
+          </section>
+
+        </div>
+
+        <aside className="checkout-summary">
+
+          <div className="summary-header">
+            <div className="checkout-title-icon">
+              <ShoppingCart size={20}/>
+            </div>
+
+            <div>
+              <h2>Order Summary</h2>
+              <p>{cart.length} product{cart.length !== 1 ? "s" : ""}</p>
+            </div>
+          </div>
+
+          <div className="summary-items">
+
+            {cart.map(item => (
+              <div className="summary-item" key={item.id}>
+
+                <div className="summary-product-image">
+                  {item.id === 1 ? "" : item.id === 2 ? "" : ""}
+                </div>
+
+                <div className="summary-product-info">
+                  <strong>{item.name}</strong>
+                  <span>{item.vendor}</span>
+                  <small>Qty: {item.quantity || 1}</small>
+                </div>
+
+                <strong className="summary-price">
+                  {formatINR(item.price * (item.quantity || 1))}
+                </strong>
+
+              </div>
+            ))}
+
+          </div>
+
+          <div className="summary-divider"></div>
+
+          <div className="summary-row">
+            <span>Subtotal</span>
+            <strong>{subtotal.toLocaleString("en-IN")}</strong>
+          </div>
+
+          <div className="summary-row">
+            <span>Delivery</span>
+            <strong className="free-text">FREE</strong>
+          </div>
+
+          <div className="summary-divider"></div>
+
+          <div className="summary-total">
+            <span>Total</span>
+            <strong>{formatINR(total)}</strong>
+          </div>
+
+          {checkoutError && (
+            <div className="info-box" role="alert" style={{ marginBottom: "12px" }}>
+              {checkoutError}
+            </div>
+          )}
+
+          <button
+            className="checkout-place-btn"
+            onClick={placeOrder}
+            disabled={processing || cart.length === 0}
+          >
+            {processing ? "Processing Payment..." : `Place Order  ${formatINR(total)}`}
+          </button>
+
+          <div className="checkout-safe">
+            <ShieldCheck size={17}/>
+            <span>Your information is protected with secure authentication.</span>
+          </div>
+
+        </aside>
+
+      </div>
+
+    </div>
+  );
+}
+
+function Vendors() {
+  const [vendors,setVendors]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    let active=true;
+    async function load(){
+      setLoading(true);setError("");
+      try{
+        const [vendorData,productData]=await Promise.all([api.vendors(),api.products()]);
+        const products=Array.isArray(productData)?productData:[];
+        const list=(Array.isArray(vendorData)?vendorData:[]).map(v=>({
+          ...v,
+          name:v.vendorName||v.businessName||("Vendor #"+v.id),
+          products:products.filter(p=>Number(p.vendorId)===Number(v.id)).length
+        }));
+        if(active)setVendors(list);
+      }catch(e){
+        if(active)setError(e.message||"Unable to load marketplace vendors.");
+      }finally{if(active)setLoading(false);}
+    }
+    load();
+    return()=>{active=false;};
+  },[]);
+
+  return (
+    <div className="content">
+      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore vendors registered in your active store." action={<button className="secondary-btn" onClick={()=>window.location.reload()}><RefreshCw size={17}/> Refresh</button>}/>
+      {error&&<div className="error-box" role="alert">{error}</div>}
+      {loading&&<div className="empty-card">Loading vendor directory...</div>}
+      {!loading&&!error&&vendors.length===0&&<div className="empty-card"><Store size={38}/><h2>No vendors available</h2><p>This store does not currently have active vendor profiles.</p></div>}
+      <div className="vendor-grid">
+        {!loading&&vendors.map(v=>(
+          <div className="vendor-card" key={v.id}>
+            <div className="vendor-avatar">{String(v.name||"V").charAt(0).toUpperCase()}</div>
+            <div><h3>{v.name}</h3><p>{v.email||"Contact details unavailable"}</p></div>
+            <span className={"badge "+(String(v.status||"").toUpperCase()==="ACTIVE"?"green":"orange")}>{v.status||"UNKNOWN"}</span>
+            <div className="vendor-meta"><span>{v.products} products</span><span>{v.businessName||"Marketplace vendor"}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Orders() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const role = localStorage.getItem("marketgrid_role");
+  const customerId = Number(
+    localStorage.getItem("marketgrid_customer_id") ||
+    localStorage.getItem("marketgrid_user_id")
+  );
+
+  async function loadOrders() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await api.orders();
+      if (!Array.isArray(data)) {
+        throw new Error("The Order Service returned an unexpected response.");
+      }
+
+      const customerOrders =
+        role === "CUSTOMER"
+          ? data.filter(order => Number(order.customerId) === customerId)
+          : data;
+
+      setOrders(
+        customerOrders.sort(
+          (a, b) => Number(b.id) - Number(a.id)
+        )
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="content">
+
+        <PageHead
+          eyebrow="ORDER MANAGEMENT"
+          title="My Orders"
+          description="Track your purchases across marketplace vendors."
+        />
+
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "20px",
+            padding: "70px 30px",
+            textAlign: "center"
+          }}
+        >
+          <Package
+            size={48}
+            style={{ color: "#2563eb", marginBottom: "15px" }}
+          />
+
+          <h2 style={{ margin: 0 }}>
+            Loading your orders...
+          </h2>
+
+          <p style={{ color: "#64748b" }}>
+            Please wait while we fetch your latest purchases.
+          </p>
+        </div>
+
+      </div>
+    );
+  }
+
+  return (
+    <div className="content">
+
+      <PageHead
+        eyebrow="ORDER MANAGEMENT"
+        title="My Orders"
+        description="Track your purchases across marketplace vendors."
+        action={
+          <button
+            className="secondary-btn"
+            onClick={loadOrders}
+          >
+            Refresh
+          </button>
+        }
+      />
+
+      {error && (
+        <div className="error-box">
+          {error}
+        </div>
+      )}
+
+      {!error && orders.length === 0 && (
+        <div className="empty-card">
+
+          <Package size={52}/>
+
+          <h2>No orders yet</h2>
+
+          <p>
+            Your purchases will appear here after you place an order.
+          </p>
+
+          <Link
+            to="/shop"
+            className="primary-btn"
+          >
+            Continue Shopping
+          </Link>
+
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "18px"
+        }}
+      >
+
+        {orders.map(order => {
+
+          const status = String(
+            order.status || "PLACED"
+          ).toUpperCase();
+
+          const statusClass =
+            status === "DELIVERED"
+              ? "green"
+              : status === "CANCELLED"
+              ? "red"
+              : status === "SHIPPED"
+              ? "blue"
+              : "blue";
+
+          const createdDate = order.createdAt
+            ? new Date(order.createdAt).toLocaleDateString(
+                "en-IN",
+                {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric"
+                }
+              )
+            : "Recent order";
+
+          return (
+            <div
+              key={order.id}
+              style={{
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "20px",
+                overflow: "hidden",
+                boxShadow: "0 8px 25px rgba(15,23,42,.05)"
+              }}
+            >
+
+              {/* ORDER HEADER */}
+
+              <div
+                style={{
+                  padding: "18px 22px",
+                  background: "#f8fafc",
+                  borderBottom: "1px solid #e2e8f0",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "15px",
+                  flexWrap: "wrap"
+                }}
+              >
+
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap"
+                    }}
+                  >
+
+                    <strong
+                      style={{
+                        fontSize: "20px",
+                        color: "#0f172a"
+                      }}
+                    >
+                      Order #{order.id}
+                    </strong>
+
+                    <span
+                      className={"badge " + statusClass}
+                    >
+                      {status}
+                    </span>
+
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "6px",
+                      color: "#64748b",
+                      fontSize: "14px"
+                    }}
+                  >
+                    Placed on {createdDate}
+                  </div>
+
+                </div>
+
+                <div
+                  style={{
+                    textAlign: "right"
+                  }}
+                >
+
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      color: "#64748b"
+                    }}
+                  >
+                    Order Total
+                  </div>
+
+                  <strong
+                    style={{
+                      fontSize: "21px",
+                      color: "#0f172a"
+                    }}
+                  >
+                    &#8377;{Number(
+                      order.totalAmount || 0
+                    ).toLocaleString("en-IN")}
+                  </strong>
+
+                </div>
+
+              </div>
+
+
+              {/* ORDER ITEMS */}
+
+              <div
+                style={{
+                  padding: "20px 22px"
+                }}
+              >
+
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: ".08em",
+                    marginBottom: "12px"
+                  }}
+                >
+                  Items in this order
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px"
+                  }}
+                >
+
+                  {(order.items || []).map(
+                    (item, index) => (
+
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "15px",
+                        padding: "14px",
+                        background: "#f8fafc",
+                        borderRadius: "12px",
+                        border: "1px solid #eef2f7",
+                        flexWrap: "wrap"
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "13px"
+                        }}
+                      >
+
+                        <div
+                          style={{
+                            width: "44px",
+                            height: "44px",
+                            borderRadius: "10px",
+                            background: "#eaf2ff",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#2563eb",
+                            flexShrink: 0
+                          }}
+                        >
+                          <Package size={21}/>
+                        </div>
+
+                        <div>
+
+                          <strong
+                            style={{
+                              display: "block",
+                              color: "#0f172a"
+                            }}
+                          >
+                            Product #{item.productId}
+                          </strong>
+
+                          <span
+                            style={{
+                              color: "#64748b",
+                              fontSize: "14px"
+                            }}
+                          >
+                            Vendor #{item.vendorId}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "24px"
+                        }}
+                      >
+
+                        <span
+                          style={{
+                            color: "#475569",
+                            fontSize: "14px"
+                          }}
+                        >
+                          Qty: <strong>{item.quantity}</strong>
+                        </span>
+
+                        <strong
+                          style={{
+                            color: "#0f172a"
+                          }}
+                        >
+                          &#8377;{Number(
+                            item.price || 0
+                          ).toLocaleString("en-IN")}
+                        </strong>
+
+                      </div>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+              </div>
+
+
+              {/* ORDER FOOTER */}
+
+              <div
+                style={{
+                  padding: "16px 22px",
+                  borderTop: "1px solid #e2e8f0",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "15px",
+                  flexWrap: "wrap"
+                }}
+              >
+
+                <div
+                  style={{
+                    color: "#64748b",
+                    fontSize: "14px"
+                  }}
+                >
+                  Tenant #{order.tenantId}
+                  <span style={{ margin: "0 8px" }}>
+                    ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢
+                  </span>
+                  {order.items?.length || 0} item
+                  {(order.items?.length || 0) !== 1
+                    ? "s"
+                    : ""}
+                </div>
+
+                <Link
+                  to={"/orders/" + order.id}
+                  className="primary-btn"
+                >
+                  View Details
+                </Link>
+
+              </div>
+
+            </div>
+          );
+        })}
+
+      </div>
+
+    </div>
+  );
+}
+function OrderDetails() {
+  const { id } = useParams();
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const role = localStorage.getItem("marketgrid_role");
+  const customerId = Number(localStorage.getItem("marketgrid_customer_id") || localStorage.getItem("marketgrid_user_id"));
+
+  useEffect(() => {
+    async function loadOrder() {
+      try {
+        const data = await api.order(id);
+        if (!data || !data.id) {
+          throw new Error("Order not found");
+        }
+
+        if (
+          role === "CUSTOMER" &&
+          Number(data.customerId) !== customerId
+        ) {
+          throw new Error("You are not authorized to view this order.");
+        }
+
+        setOrder(data);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadOrder();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="content narrow">
+        <PageHead
+          eyebrow="ORDER DETAILS"
+          title="Loading order..."
+          description="Fetching your order information."
+        />
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="content narrow">
+        <PageHead
+          eyebrow="ORDER DETAILS"
+          title="Order unavailable"
+          description={error || "Order not found."}
+        />
+
+        <div className="empty-card">
+          <Package size={48}/>
+          <h2>Unable to open this order</h2>
+          <p>{error || "The requested order could not be found."}</p>
+
+          <Link to="/orders" className="primary-btn">
+            Back to My Orders
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const status = String(order.status || "PLACED").toUpperCase();
+
+  const steps = ["PLACED", "CONFIRMED", "SHIPPED", "DELIVERED"];
+
+  let currentStep = steps.indexOf(status);
+
+  if (currentStep < 0) {
+    currentStep = status === "CANCELLED" ? 0 : 0;
+  }
+
+  return (
+    <div className="content narrow">
+      <PageHead
+        eyebrow="ORDER DETAILS"
+        title={"Order #" + order.id}
+        description="View your order items, vendors, total and fulfillment status."
+        action={
+          <Link to="/orders" className="secondary-btn">
+            Back to Orders
+          </Link>
+        }
+      />
+
+      <div className="table-card">
+        <div className="table-head">
+          <div>
+            <b>Order Summary</b>
+            <small>Customer #{order.customerId}</small>
+          </div>
+
+          <span className="badge blue">
+            {order.status}
+          </span>
+        </div>
+
+        <div className="order-items">
+          {(order.items || []).map((item, index) => (
+            <div
+              key={index}
+              className="order-card"
+              style={{ marginBottom: "10px" }}
+            >
+              <div className="order-main">
+                <strong>Product #{item.productId}</strong>
+                <span>
+                  Vendor #{item.vendorId}
+                  {"  "}
+                  Quantity: {item.quantity}
+                </span>
+
+                <strong>
+                  &#8377;{Number(item.price || 0).toLocaleString("en-IN")}
+                </strong>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="summary-total">
+          <span>Total Amount</span>
+          <strong>
+            &#8377;{Number(order.totalAmount || 0).toLocaleString("en-IN")}
+          </strong>
+        </div>
+      </div>
+
+      <div className="table-card" style={{ marginTop: "20px" }}>
+        <div className="table-head">
+          <div>
+            <b>Order Tracking</b>
+            <small>Current status: {order.status}</small>
+          </div>
+        </div>
+
+        <div className="orders-list">
+          {steps.map((step, index) => (
+            <div className="order-card" key={step}>
+              <div className="order-icon">
+                <Package size={22}/>
+              </div>
+
+              <div className="order-main">
+                <strong>{step}</strong>
+
+                <span>
+                  {index <= currentStep
+                    ? "Completed"
+                    : "Pending"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ type }) {
+  const config = {
+    admin: [
+      "PLATFORM ADMINISTRATION",
+      "Super Admin Dashboard",
+      "Monitor the entire MarketGrid ecosystem.",
+      "Platform"
+    ],
+    tenant: [
+      "TENANT MANAGEMENT",
+      "Store Overview",
+      "Manage your marketplace operations from one place.",
+      "Tenant"
+    ],
+    vendor: [
+      "VENDOR CENTER",
+      "Vendor Dashboard",
+      "Manage products, inventory and orders.",
+      "Vendor"
+    ]
+  }[type];
+
+  const [products, setProducts] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const [productData, vendorData, orderData] = await Promise.all([
+          api.products(),
+          api.vendors(),
+          api.orders()
+        ]);
+
+        if (!Array.isArray(productData) ||
+            !Array.isArray(vendorData) ||
+            !Array.isArray(orderData)) {
+          throw new Error("The dashboard API returned an unexpected response.");
+        }
+
+        if (!cancelled) {
+          setProducts(productData);
+          setVendors(vendorData);
+          setOrders(orderData);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Unable to load dashboard data.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [type]);
+
+  const totalStock = products.reduce(
+    (sum, product) => sum + (Number(product.stockQuantity ?? product.stock) || 0),
+    0
+  );
+
+  return (
+    <div className="content">
+      <PageHead
+        eyebrow={config[0]}
+        title={config[1]}
+        description={config[2]}
+        action={
+          <button
+            className="secondary-btn"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw size={17} /> Refresh
+          </button>
+        }
+      />
+
+      {error && (
+        <div className="info-box" role="alert">
+          Could not load all dashboard data: {error}
+        </div>
+      )}
+
+      <div className="stats">
+        <Stat
+          icon={Package}
+          label="Total Products"
+          value={loading ? "Loading..." : products.length}
+          note="Products returned by API"
+        />
+        <Stat
+          icon={Users}
+          label="Vendors"
+          value={loading ? "Loading..." : vendors.length}
+          note="Vendors returned by API"
+          tone="purple"
+        />
+        <Stat
+          icon={Boxes}
+          label="Total Stock"
+          value={loading ? "Loading..." : totalStock.toLocaleString("en-IN")}
+          note="Units in returned products"
+          tone="green"
+        />
+        <Stat
+          icon={Truck}
+          label="Orders"
+          value={loading ? "Loading..." : orders.length}
+          note="Orders returned by API"
+          tone="orange"
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="table-card">
+          <div className="table-head">
+            <div>
+              <b>Platform Products</b>
+              <small>
+                {loading
+                  ? "Loading products..."
+                  : `${products.length} products returned by API`}
+              </small>
+            </div>
+            <Link to="/admin/products" className="secondary-btn small">
+              View all
+            </Link>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>PRODUCT</th>
+                  <th>VENDOR ID</th>
+                  <th>PRICE</th>
+                  <th>STOCK</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!loading && products.slice(0, 5).map(product => (
+                  <tr key={product.id}>
+                    <td>
+                      <b>{product.name ?? product.productName ?? `Product #${product.id}`}</b>
+                    </td>
+                    <td>{product.vendorId ?? "Ã¢â‚¬â€"}</td>
+                    <td>
+                      {formatINR(product.price ?? 0)}
+                    </td>
+                    <td>{Number(product.stockQuantity ?? product.stock ?? 0)}</td>
+                    <td>
+                      <span className="badge green">
+                        {product.status ?? "Listed"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {!loading && !error && products.length === 0 && (
+                  <tr>
+                    <td colSpan="5">No products were returned by the API.</td>
+                  </tr>
+                )}
+
+                {loading && (
+                  <tr>
+                    <td colSpan="5">Loading product records...</td>
+                  </tr>
+                )}
+
+                {error && !loading && products.length === 0 && (
+                  <tr>
+                    <td colSpan="5">Product data is unavailable.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-title"><b>Quick actions</b></div>
+          {type === "admin" && <>
+            <Quick icon={Store} text="Manage tenants" href="/admin/tenants" />
+            <Quick icon={Users} text="Manage users" href="/admin/users" />
+            <Quick icon={BarChart3} text="View analytics" href="/admin/analytics" />
+          </>}
+          {type === "tenant" && <>
+            <Quick icon={Package} text="Add product" href="/tenant/products" />
+            <Quick icon={Users} text="Manage vendors" href="/tenant/vendors" />
+            <Quick icon={Truck} text="Review orders" href="/tenant/orders" />
+          </>}
+          {type === "vendor" && <>
+            <Quick icon={Plus} text="Add product" href="/vendor/products" />
+            <Quick icon={Boxes} text="Update inventory" href="/vendor/inventory" />
+            <Quick icon={Truck} text="Process orders" href="/vendor/orders" />
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function Quick({icon:Icon,text,href}) {
+  return <Link to={href} className="quick"><Icon size={18}/><span>{text}</span><ChevronRight size={16}/></Link>
+}
+
+function GenericPage({ title, description }) {
+  return (
+    <div className="content narrow">
+      <PageHead eyebrow="MARKETGRID MANAGEMENT" title={title} description={description}/>
+      <div className="empty-card">
+        <BarChart3 size={44}/>
+        <h2>{title}</h2>
+        <p>This module is a placeholder. Its backend API and save actions have not been implemented yet.</p>
+      </div>
+    </div>
+  );
+}
+
+function RoleRedirect() {
+  const { role } = useAuth();
+  if (role === "SUPER_ADMIN") return <Navigate to="/admin" replace/>;
+  if (role === "TENANT_ADMIN") return <Navigate to="/tenant" replace/>;
+  if (role === "TENANT_APPLICANT") return <Navigate to="/tenant-applicant" replace/>;
+  if (role === "VENDOR") return <Navigate to="/vendor" replace/>;
+  if (role === "CUSTOMER") return <Navigate to="/shop" replace/>;
+  return <Navigate to="/login" replace/>;
+}
+
+function App() {
+  const allRoles = ["SUPER_ADMIN", "TENANT_ADMIN", "VENDOR", "CUSTOMER"];
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login/>}/>
+        <Route path="/register" element={<Register/>}/>
+        <Route path="/" element={<><Header/><Home/></>}/>
+
+        <Route element={<Shell/>}>
+          <Route path="/tenant-applicant" element={<RequireRole allowedRoles={["TENANT_APPLICANT", "TENANT_ADMIN"]}><TenantApplicantDashboard/></RequireRole>}/>
+          <Route path="/shop" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerDashboard/></RequireRole>}/>
+          <Route path="/shop/products" element={<RequireRole allowedRoles={["CUSTOMER"]}><CustomerShop/></RequireRole>}/>
+          <Route path="/cart" element={<RequireRole allowedRoles={["CUSTOMER"]}><Cart/></RequireRole>}/>
+          <Route path="/checkout" element={<RequireRole allowedRoles={["CUSTOMER"]}><Checkout/></RequireRole>}/>
+
+          <Route path="/vendors" element={<RequireRole allowedRoles={allRoles}><Vendors/></RequireRole>}/>
+          <Route path="/orders" element={<RequireRole allowedRoles={allRoles}><Orders/></RequireRole>}/>
+          <Route path="/orders/:id" element={<RequireRole allowedRoles={allRoles}><OrderDetails/></RequireRole>}/>
+
+          <Route path="/admin" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><Dashboard type="admin"/></RequireRole>}/>
+          <Route path="/admin/tenants" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><TenantsPage/></RequireRole>}/>
+          <Route path="/admin/users" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminUsers/></RequireRole>}/>
+          <Route path="/admin/vendors" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="vendors"/></RequireRole>}/>
+          <Route path="/admin/products" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="products"/></RequireRole>}/>
+          <Route path="/admin/orders" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="orders"/></RequireRole>}/>
+          <Route path="/admin/analytics" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="analytics"/></RequireRole>}/>
+          <Route path="/admin/settings" element={<RequireRole allowedRoles={["SUPER_ADMIN"]}><AdminManagement type="settings"/></RequireRole>}/>
+
+          <Route path="/tenant" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><Dashboard type="tenant"/></RequireRole>}/>
+          <Route path="/tenant/products" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="products"/></RequireRole>}/>
+          <Route path="/tenant/vendors" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantVendors/></RequireRole>}/>
+          <Route path="/tenant/inventory" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="inventory"/></RequireRole>}/>
+          <Route path="/tenant/orders" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="orders"/></RequireRole>}/>
+          <Route path="/tenant/settings" element={<RequireRole allowedRoles={["TENANT_ADMIN"]}><TenantManagement type="settings"/></RequireRole>}/>
+
+          <Route path="/vendor" element={<RequireRole allowedRoles={["VENDOR"]}><VendorDashboard/></RequireRole>}/>
+          <Route path="/vendor/products" element={<RequireRole allowedRoles={["VENDOR"]}><VendorProducts/></RequireRole>}/>
+          <Route path="/vendor/inventory" element={<RequireRole allowedRoles={["VENDOR"]}><VendorInventory/></RequireRole>}/>
+          <Route path="/vendor/orders" element={<RequireRole allowedRoles={["VENDOR"]}><VendorOrders/></RequireRole>}/>
+          <Route path="/vendor/settings" element={<RequireRole allowedRoles={["VENDOR"]}><GenericPage title="Vendor Settings" description="Manage your vendor profile."/></RequireRole>}/>
+        </Route>
+
+        <Route path="*" element={<RoleRedirect/>}/>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+export default App;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
