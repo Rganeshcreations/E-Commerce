@@ -1,136 +1,110 @@
-import React,{useEffect,useMemo,useState} from "react";
-import {RefreshCw,Store,Users,Search,Package,Building2,AlertCircle,Plus,X} from "lucide-react";
-import {api} from "../services/api";
+import React, { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, XCircle, RefreshCw, Users, Clock } from "lucide-react";
+import { api } from "../services/api";
 
-export default function TenantVendors(){
-  const [vendors,setVendors]=useState([]);
-  const [query,setQuery]=useState("");
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState("");
-  const [message,setMessage]=useState("");
-  const [showForm,setShowForm]=useState(false);
-  const [saving,setSaving]=useState(false);
-  const [form,setForm]=useState({
-    fullName:"",email:"",password:"",phone:"",businessName:""
-  });
+export default function TenantVendors() {
+  const [applications, setApplications] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  const load=async()=>{
-    setLoading(true);setError("");
-    try{
-      const data=await api.vendors();
-      setVendors(Array.isArray(data)?data:[]);
-    }catch(e){
-      setError(e.message||"Unable to load vendors for this tenant.");
-    }finally{setLoading(false);}
-  };
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [pending, vendorRows] = await Promise.all([
+        api.pendingVendorApplications(),
+        api.vendors()
+      ]);
+      setApplications(Array.isArray(pending) ? pending : []);
+      setVendors(Array.isArray(vendorRows) ? vendorRows : []);
+    } catch (e) {
+      setError(e.message || "Unable to load tenant vendor data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(()=>{load();},[]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const filtered=useMemo(()=>vendors.filter(v=>
-    [v.vendorName,v.businessName,v.email,v.status].some(value=>
-      String(value||"").toLowerCase().includes(query.toLowerCase().trim())
-    )
-  ),[vendors,query]);
-
-  const active=vendors.filter(v=>String(v.status||"").toUpperCase()==="ACTIVE").length;
-
-  async function createVendor(event){
-    event.preventDefault();
-    setError("");setMessage("");
-    if(form.fullName.trim().length<2||!form.businessName.trim()||form.password.length<8){
-      setError("Enter the vendor name, business name, and a password with at least 8 characters.");
+  async function review(application, approve) {
+    const promptText = approve
+      ? "Optional approval message for the vendor:"
+      : "Enter a reason for rejecting this application:";
+    const reviewMessage = window.prompt(promptText, "");
+    if (reviewMessage === null) return;
+    if (!approve && !reviewMessage.trim()) {
+      setError("A rejection message is required.");
       return;
     }
-    let createdUser=null;
-    try{
-      setSaving(true);
-      createdUser=await api.createUser({
-        fullName:form.fullName.trim(),
-        email:form.email.trim().toLowerCase(),
-        password:form.password,
-        tenantId:Number(localStorage.getItem("marketgrid_tenant")),
-        role:"VENDOR"
-      });
-      try{
-        await api.createVendor({
-          tenantId:Number(localStorage.getItem("marketgrid_tenant")),
-          vendorName:form.fullName.trim(),
-          email:form.email.trim().toLowerCase(),
-          phone:form.phone.trim(),
-          businessName:form.businessName.trim(),
-          status:"ACTIVE"
-        });
-      }catch(vendorError){
-        if(createdUser?.id){
-          try{await api.deleteUser(createdUser.id);}catch{/* preserve the original failure */}
-        }
-        throw vendorError;
-      }
-      setShowForm(false);
-      setForm({fullName:"",email:"",password:"",phone:"",businessName:""});
-      await load();
-      setMessage("Vendor login and vendor profile created successfully for this tenant.");
-    }catch(e){
-      setError(e.message||"Unable to create vendor account.");
-    }finally{setSaving(false);}
+    setBusyId(application.id);
+    setError("");
+    setMessage("");
+    try {
+      if (approve) await api.approveVendorApplication(application.id, reviewMessage.trim());
+      else await api.rejectVendorApplication(application.id, reviewMessage.trim());
+      setMessage(approve ? "Vendor application approved." : "Vendor application rejected.");
+      await refresh();
+    } catch (e) {
+      setError(e.message || "Unable to review this application.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  return <div className="content">
-    <div className="page-head">
-      <div><p className="eyebrow">TENANT VENDOR MANAGEMENT</p><h1>Vendors</h1><p>Vendor profiles and accounts belonging to your authenticated tenant.</p></div>
-      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <button className="secondary-btn" onClick={load} disabled={loading}><RefreshCw size={16}/> Refresh</button>
-        <button className="primary-btn" onClick={()=>{setError("");setMessage("");setShowForm(true);}}><Plus size={16}/> Add Vendor</button>
-      </div>
-    </div>
-
-    {error&&<div className="error-box" role="alert">{error}</div>}
-    {message&&<div className="info-box" role="status">{message}</div>}
-
-    {showForm&&<div className="panel" style={{marginBottom:22,padding:22}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div><h2 style={{margin:0}}>Create Vendor Account</h2><p style={{margin:"5px 0 0",color:"#75839a"}}>This creates a VENDOR login and a matching vendor profile in your tenant.</p></div>
-        <button className="icon-btn" type="button" onClick={()=>setShowForm(false)}><X size={18}/></button>
-      </div>
-      <form className="auth-form" onSubmit={createVendor}>
-        <label>Vendor Full Name<input value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})} minLength="2" required/></label>
-        <label>Email<input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} autoComplete="email" required/></label>
-        <label>Business Name<input value={form.businessName} onChange={e=>setForm({...form,businessName:e.target.value})} required/></label>
-        <label>Phone (optional)<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} inputMode="tel"/></label>
-        <label>Temporary Password<input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} minLength="8" autoComplete="new-password" required/></label>
-        <div style={{display:"flex",gap:10}}>
-          <button type="button" className="secondary-btn" onClick={()=>setShowForm(false)} disabled={saving}>Cancel</button>
-          <button type="submit" className="primary-btn" disabled={saving}>{saving?"Creating...":"Create Vendor"}</button>
+  return (
+    <div className="content" style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <p style={{ color: "#2864e6", fontWeight: 700, letterSpacing: 2, fontSize: 12 }}>TENANT MANAGEMENT</p>
+          <h1 style={{ margin: "6px 0" }}>Vendor Applications</h1>
+          <p style={{ color: "#64748b" }}>Review applications submitted to your store. Other tenants' applications are not shown.</p>
         </div>
-      </form>
-    </div>}
-
-    <div className="stats">
-      <div className="stat"><div className="stat-icon blue"><Store size={20}/></div><div><span>Total Vendors</span><strong>{loading?"—":vendors.length}</strong><small>Backend records</small></div></div>
-      <div className="stat"><div className="stat-icon green"><Users size={20}/></div><div><span>Active Vendors</span><strong>{loading?"—":active}</strong><small>Active profiles</small></div></div>
-      <div className="stat"><div className="stat-icon purple"><Building2 size={20}/></div><div><span>Tenant</span><strong>#{localStorage.getItem("marketgrid_tenant")||"—"}</strong><small>JWT tenant context</small></div></div>
-    </div>
-
-    <div className="table-card">
-      <div className="table-head">
-        <div><b>Vendor Directory</b><small>{loading?"Loading vendors...":filtered.length+" records"}</small></div>
-        <div className="global-search" style={{maxWidth:360,margin:0}}><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search vendor, business, email..."/></div>
+        <button className="secondary-btn" onClick={refresh} disabled={loading}><RefreshCw size={16} /> Refresh</button>
       </div>
-      <div style={{overflowX:"auto"}}>
-        <table>
-          <thead><tr><th>ID</th><th>VENDOR</th><th>BUSINESS</th><th>EMAIL</th><th>STATUS</th></tr></thead>
-          <tbody>
-            {loading&&<tr><td colSpan="5" style={{textAlign:"center",padding:28}}>Loading vendor records...</td></tr>}
-            {!loading&&filtered.map(v=><tr key={v.id}>
-              <td>#{v.id}</td><td><b>{v.vendorName||"Unnamed vendor"}</b></td>
-              <td>{v.businessName||"—"}</td><td>{v.email||"—"}</td>
-              <td><span className={"badge "+(String(v.status||"").toUpperCase()==="ACTIVE"?"green":"orange")}>{v.status||"UNKNOWN"}</span></td>
-            </tr>)}
-            {!loading&&!error&&!filtered.length&&<tr><td colSpan="5" style={{textAlign:"center",padding:28}}><AlertCircle size={20}/> No vendors found for this tenant.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+
+      {error && <div role="alert" style={{ margin: "16px 0", padding: 12, borderRadius: 8, background: "#fef2f2", color: "#b42318" }}>{error}</div>}
+      {message && <div role="status" style={{ margin: "16px 0", padding: 12, borderRadius: 8, background: "#ecfdf3", color: "#067647" }}>{message}</div>}
+
+      <section style={{ marginTop: 24, padding: 20, border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff" }}>
+        <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}><Clock size={20} /> Pending applications ({applications.length})</h2>
+        {loading ? <p>Loading applications…</p> : applications.length === 0 ? <p>No pending vendor applications for this store.</p> : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+              <thead><tr>{["Applicant", "Email", "Business", "Submitted", "Actions"].map(x => <th key={x} style={{ textAlign: "left", padding: 12, borderBottom: "1px solid #e2e8f0" }}>{x}</th>)}</tr></thead>
+              <tbody>{applications.map(app => <tr key={app.id}>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{app.applicantName}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{app.email}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{app.businessName}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{app.submittedAt ? new Date(app.submittedAt).toLocaleString() : "—"}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9", whiteSpace: "nowrap" }}>
+                  <button disabled={busyId !== null} onClick={() => review(app, true)} style={{ marginRight: 8, padding: "8px 10px", border: 0, borderRadius: 7, background: "#15803d", color: "white", cursor: "pointer" }}><CheckCircle2 size={15} /> Approve</button>
+                  <button disabled={busyId !== null} onClick={() => review(app, false)} style={{ padding: "8px 10px", border: 0, borderRadius: 7, background: "#b42318", color: "white", cursor: "pointer" }}><XCircle size={15} /> Reject</button>
+                </td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 24, padding: 20, border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff" }}>
+        <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}><Users size={20} /> Approved vendors ({vendors.length})</h2>
+        {loading ? <p>Loading vendors…</p> : vendors.length === 0 ? <p>No approved vendors yet.</p> : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 580 }}>
+              <thead><tr>{["Vendor", "Email", "Business", "Status"].map(x => <th key={x} style={{ textAlign: "left", padding: 12, borderBottom: "1px solid #e2e8f0" }}>{x}</th>)}</tr></thead>
+              <tbody>{vendors.map(v => <tr key={v.id}>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{v.vendorName}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{v.email}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{v.businessName}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f1f5f9" }}>{v.status}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
-    <p style={{color:"#75839a",fontSize:13,marginTop:14}}><Package size={14} style={{verticalAlign:"middle"}}/> Vendor accounts are created through the authenticated tenant administrator workflow, not public self-registration.</p>
-  </div>;
+  );
 }
