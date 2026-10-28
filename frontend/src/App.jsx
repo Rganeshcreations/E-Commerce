@@ -447,7 +447,8 @@ function Register() {
           tenantSlug: form.tenantSlug.trim(),
           applicantName: form.fullName.trim(),
           email: form.email.trim(),
-          businessName: form.businessName.trim()
+          businessName: form.businessName.trim(),
+          password: form.password
         });
         setMessage("Application submitted successfully. The selected store administrator must approve it before vendor access is granted.");
         return;
