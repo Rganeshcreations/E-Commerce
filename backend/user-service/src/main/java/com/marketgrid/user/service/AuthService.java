@@ -77,10 +77,17 @@ public class AuthService {
         }
         TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
         String email = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
-        if (userRepository.findByEmailAndTenantId(email, tenant.getId()).isPresent()) {
-            throw new IllegalArgumentException("An account already exists for this email and store");
+        User user = userRepository.findByEmailAndTenantId(email, tenant.getId()).orElse(null);
+        if (user != null) {
+            if (!"VENDOR".equals(user.getRole()) || user.isActive()) {
+                throw new IllegalArgumentException("An active account already exists for this email and store");
+            }
+            // Reuse an inactive vendor account after a rejected application.
+            user.setFullName(request.getFullName().trim());
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            return userRepository.save(user);
         }
-        User user = new User();
+        user = new User();
         user.setTenantId(tenant.getId());
         user.setFullName(request.getFullName().trim());
         user.setEmail(email);
