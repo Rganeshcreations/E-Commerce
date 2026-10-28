@@ -89,6 +89,43 @@ public class AuthService {
         return userRepository.save(user);
     }
 
+    public User registerPendingVendor(RegisterRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vendor application details are required");
+        }
+        String fullName = request.getFullName() == null ? "" : request.getFullName().trim();
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        String password = request.getPassword();
+        String slug = request.getTenantSlug() == null ? "" : request.getTenantSlug().trim();
+
+        if (fullName.length() < 2 || fullName.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Full name must be between 2 and 120 characters");
+        }
+        if (!email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
+        }
+        if (password == null || password.length() < 8 || password.length() > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain 8 to 72 characters");
+        }
+        if (slug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A store must be selected for a vendor application");
+        }
+
+        TenantLookupResponse tenant = lookupActiveTenant(slug);
+        if (userRepository.findByEmailAndTenantId(email, tenant.getId()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists in this store");
+        }
+
+        User user = new User();
+        user.setTenantId(tenant.getId());
+        user.setFullName(fullName);
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRole("VENDOR");
+        user.setActive(false);
+        return userRepository.save(user);
+    }
+
     public LoginResponse login(LoginRequest request) {
         if (request == null || request.getEmail() == null || request.getEmail().isBlank()
                 || request.getPassword() == null || request.getPassword().isBlank()) {
