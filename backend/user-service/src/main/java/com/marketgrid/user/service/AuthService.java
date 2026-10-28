@@ -89,6 +89,35 @@ public class AuthService {
         return userRepository.save(user);
     }
 
+    public User registerPendingVendor(RegisterRequest request) {
+        if (request.getTenantSlug() == null || request.getTenantSlug().isBlank()
+                || request.getFullName() == null || request.getFullName().isBlank()
+                || request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().length() < 8) {
+            throw new IllegalArgumentException("Name, email, store and password of at least 8 characters are required");
+        }
+        TenantLookupResponse tenant = lookupActiveTenant(request.getTenantSlug().trim());
+        String email = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        User user = userRepository.findByEmailAndTenantId(email, tenant.getId()).orElse(null);
+        if (user != null) {
+            if (!"VENDOR".equals(user.getRole()) || user.isActive()) {
+                throw new IllegalArgumentException("An active account already exists for this email and store");
+            }
+            // Reuse an inactive vendor account after a rejected application.
+            user.setFullName(request.getFullName().trim());
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            return userRepository.save(user);
+        }
+        user = new User();
+        user.setTenantId(tenant.getId());
+        user.setFullName(request.getFullName().trim());
+        user.setEmail(email);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("VENDOR");
+        user.setActive(false);
+        return userRepository.save(user);
+    }
+
     public LoginResponse login(LoginRequest request) {
         if (request == null || request.getEmail() == null || request.getEmail().isBlank()
                 || request.getPassword() == null || request.getPassword().isBlank()) {

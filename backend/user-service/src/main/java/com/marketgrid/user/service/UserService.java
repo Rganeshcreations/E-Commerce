@@ -144,6 +144,16 @@ public class UserService {
         return userRepository.save(existing);
     }
 
+    public User activateVendorByEmail(String email) {
+        Long tenantId = TenantContext.getTenantId();
+        if (tenantId == null) throw new RuntimeException("Tenant information not found");
+        User user = userRepository.findByEmailAndTenantId(email.trim().toLowerCase(java.util.Locale.ROOT), tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor account not found for this tenant"));
+        if (!"VENDOR".equals(user.getRole())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Account is not a vendor");
+        user.setActive(true);
+        return userRepository.save(user);
+    }
+
     public void deleteUser(Long id) {
         User existing = findManageableUser(id);
         if ("SUPER_ADMIN".equals(existing.getRole())) {

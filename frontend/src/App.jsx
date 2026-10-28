@@ -460,7 +460,7 @@ function Register() {
       } else {
         await api.submitVendorApplication({
           applicantName: form.fullName.trim(),
-          applicantEmail: form.email.trim().toLowerCase(),
+          email: form.email.trim().toLowerCase(),
           tenantSlug: form.tenantSlug,
           businessName: form.businessName.trim(),
           password: form.password
