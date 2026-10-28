@@ -17,6 +17,6 @@ public class VendorApplicationController {
     @PostMapping public ResponseEntity<VendorApplication> submit(@RequestBody SubmitRequest r){return ResponseEntity.status(HttpStatus.CREATED).body(service.submit(r));}
     @GetMapping public ResponseEntity<List<VendorApplication>> list(){return ResponseEntity.ok(service.list(false));}
     @GetMapping("/pending") public ResponseEntity<List<VendorApplication>> pending(){return ResponseEntity.ok(service.list(true));}
-    @PostMapping("/{id}/approve") public ResponseEntity<VendorApplication> approve(@PathVariable Long id,@RequestBody(required=false) ReviewRequest r){return ResponseEntity.ok(service.approve(id,r));}
+    @PostMapping("/{id}/approve") public ResponseEntity<VendorApplication> approve(@PathVariable Long id,@RequestBody(required=false) ReviewRequest r,@RequestHeader("Authorization") String authorization){return ResponseEntity.ok(service.approve(id,r,authorization));}
     @PostMapping("/{id}/reject") public ResponseEntity<VendorApplication> reject(@PathVariable Long id,@RequestBody ReviewRequest r){return ResponseEntity.ok(service.reject(id,r));}
 }
