@@ -107,6 +107,7 @@ export const api = {
 
   // Tenant management
   tenants: () => request("/api/tenants"),
+  activeTenants: () => request("/api/tenants/active"),
 
   tenantBySlug: (slug) =>
     request(`/api/tenants/slug/${encodeURIComponent(slug)}`),
