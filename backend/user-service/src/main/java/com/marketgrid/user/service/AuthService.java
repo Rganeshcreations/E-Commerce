@@ -175,7 +175,6 @@ public class AuthService {
         }
 
         TenantLookupResponse tenant = lookupActiveTenant(slug);
-
         User existingUser = userRepository
                 .findByEmailAndTenantId(email, tenant.getId())
                 .orElse(null);
