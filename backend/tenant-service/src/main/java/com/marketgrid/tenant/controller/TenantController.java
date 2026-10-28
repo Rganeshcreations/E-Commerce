@@ -32,6 +32,14 @@ public class TenantController {
         return new TenantResponse(tenantService.getActiveBySlug(slug));
     }
 
+    @GetMapping("/active")
+    public List<TenantResponse> getActiveTenants() {
+        return tenantService.getAll().stream()
+            .filter(Tenant::isActive)
+            .map(TenantResponse::new)
+            .toList();
+    }
+
     @GetMapping
     public List<TenantResponse> getAll() {
         return tenantService.getAll().stream()
