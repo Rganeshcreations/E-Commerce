@@ -14,9 +14,9 @@ import time
 import tkinter as tk
 import urllib.error
 import urllib.request
+import webbrowser
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
-import webbrowser
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
@@ -35,13 +35,15 @@ SERVICES = [
 ]
 
 SECRET_PATTERN = re.compile(
-    r"(?i)(password|secret|token|api[_-]?key)\s*([=:]\s*|\s+)([^\s,;]+)"
+    r"(?i)(password|secret|token|api[_-]?key)(\s*[=:]\s*|\s+)([^\s,;]+)"
 )
 
 
 def safe_log(text: str) -> str:
     """Redact common secret assignments before showing command output."""
-    return SECRET_PATTERN.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
+    return SECRET_PATTERN.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", text
+    )
 
 
 def port_is_open(port: int, timeout: float = 0.7) -> bool:
@@ -56,6 +58,7 @@ def port_is_open(port: int, timeout: float = 0.7) -> bool:
 
 
 def find_maven() -> Path | None:
+    """Find the locally cached Maven wrapper distribution."""
     wrapper_root = Path.home() / ".m2" / "wrapper" / "dists"
     if not wrapper_root.exists():
         return None
@@ -66,74 +69,125 @@ def find_maven() -> Path | None:
 class ControlCenter(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("MarketGrid Commerce — Control Center")
-        self.geometry("900x650")
-        self.minsize(760, 520)
+        self.title("MarketGrid Commerce â€” Control Center")
+        self.geometry("1000x700")
+        self.minsize(800, 560)
         self.configure(padx=16, pady=14)
-        self.managed_processes = {}
+
+        self.managed_processes: dict[str, subprocess.Popen] = {}
         self.busy = False
 
         ttk.Label(
-            self, text="MarketGrid Control Center",
-            font=("Segoe UI", 19, "bold")
+            self,
+            text="MarketGrid Control Center",
+            font=("Segoe UI", 19, "bold"),
         ).pack(anchor="w")
         ttk.Label(
             self,
-            text="Local monitoring and validation • no cloud deployment • no credential display",
+            text=(
+                "Local monitoring and validation â€¢ no cloud deployment â€¢ "
+                "no credential display"
+            ),
         ).pack(anchor="w", pady=(2, 12))
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", pady=(0, 10))
-        ttk.Button(buttons, text="Start All", command=self.start_all).pack(side="left", padx=(0, 7))
-        ttk.Button(buttons, text="Stop All", command=self.stop_all).pack(side="left", padx=7)
-        ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(side="left", padx=7)
-        ttk.Button(buttons, text="HTTP Health Checks", command=self.refresh_http_health).pack(side="left", padx=7)
-        ttk.Button(buttons, text="Run Backend Tests", command=self.run_backend_tests).pack(side="left", padx=7)
-        ttk.Button(buttons, text="Build Frontend", command=self.build_frontend).pack(side="left", padx=7)
-        ttk.Button(buttons, text="Open Frontend", command=lambda: webbrowser.open("http://localhost:5173")).pack(side="left", padx=7)
-        ttk.Button(buttons, text="Open API Gateway", command=lambda: webbrowser.open("http://localhost:8080")).pack(side="left", padx=7)
+        ttk.Button(buttons, text="Start All", command=self.start_all).pack(
+            side="left", padx=(0, 7)
+        )
+        ttk.Button(buttons, text="Stop All", command=self.stop_all).pack(
+            side="left", padx=7
+        )
+        ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(
+            side="left", padx=7
+        )
+        ttk.Button(
+            buttons, text="HTTP Health Checks", command=self.refresh_http_health
+        ).pack(side="left", padx=7)
+        ttk.Button(
+            buttons, text="Run Backend Tests", command=self.run_backend_tests
+        ).pack(side="left", padx=7)
+        ttk.Button(
+            buttons, text="Build Frontend", command=self.build_frontend
+        ).pack(side="left", padx=7)
+        ttk.Button(
+            buttons,
+            text="Open Frontend",
+            command=lambda: webbrowser.open("http://localhost:5173"),
+        ).pack(side="left", padx=7)
+        ttk.Button(
+            buttons,
+            text="Open API Gateway",
+            command=lambda: webbrowser.open("http://localhost:8080"),
+        ).pack(side="left", padx=7)
 
-        self.table = ttk.Treeview(self, columns=("port", "status", "http"), show="headings", height=9)
+        self.table = ttk.Treeview(
+            self, columns=("port", "status", "http"), show="headings", height=9
+        )
         self.table.heading("port", text="Port")
         self.table.heading("status", text="TCP Status")
         self.table.heading("http", text="HTTP Check")
         self.table.column("port", width=90, anchor="center")
         self.table.column("status", width=140, anchor="center")
-        self.table.column("http", width=200, anchor="center")
+        self.table.column("http", width=300, anchor="center")
         self.table.pack(fill="x", pady=(0, 10))
-        for name, port in SERVICES:
-            self.table.insert("", "end", iid=str(port), values=(port, "Checking…", "Not checked"))
 
-        ttk.Label(self, text="Activity log", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        for _name, port in SERVICES:
+            self.table.insert(
+                "", "end", iid=str(port), values=(port, "Checkingâ€¦", "Not checked")
+            )
+
+        ttk.Label(self, text="Activity log", font=("Segoe UI", 11, "bold")).pack(
+            anchor="w"
+        )
         self.log = tk.Text(self, height=14, wrap="word", state="disabled")
         self.log.pack(fill="both", expand=True, pady=(5, 0))
+
         self.write_log(f"Project folder: {ROOT}")
-        self.write_log("Managed mode: Start All skips existing services; Stop All targets only processes launched here.")
+        self.write_log(
+            "Managed mode: Start All skips existing services; "
+            "Stop All targets only processes launched here."
+        )
         self.refresh_status()
 
     def write_log(self, message: str) -> None:
+        """Append a redacted message to the activity log."""
         self.log.configure(state="normal")
         self.log.insert("end", safe_log(message.rstrip()) + "\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
     def refresh_status(self) -> None:
+        """Check whether each configured local port accepts TCP connections."""
         def worker() -> None:
-            results = [(name, port, port_is_open(port)) for name, port in SERVICES]
+            results = [
+                (name, port, port_is_open(port)) for name, port in SERVICES
+            ]
+
             def update_ui() -> None:
-                for name, port, is_open in results:
-                    self.table.set(str(port), "status", "LISTENING" if is_open else "NOT RUNNING")
-                up = sum(1 for _, _, state in results if state)
-                self.write_log(f"Status check complete: {up}/{len(SERVICES)} ports listening.")
+                for _name, port, is_open in results:
+                    self.table.set(
+                        str(port),
+                        "status",
+                        "LISTENING" if is_open else "NOT RUNNING",
+                    )
+                up = sum(1 for _name, _port, state in results if state)
+                self.write_log(
+                    f"Status check complete: {up}/{len(SERVICES)} ports listening."
+                )
+
             self.after(0, update_ui)
+
         threading.Thread(target=worker, daemon=True).start()
-
-
 
     def refresh_http_health(self) -> None:
         """Probe HTTP endpoints without assuming Actuator is enabled."""
         def probe(name: str, port: int) -> tuple[int, str]:
-            candidates = ["/actuator/health", "/"] if name != "Eureka" else ["/actuator/health", "/eureka/apps", "/"]
+            if name == "Eureka":
+                candidates = ["/actuator/health", "/eureka/apps", "/"]
+            else:
+                candidates = ["/actuator/health", "/"]
+
             last_result = "No HTTP response"
             for host in ("127.0.0.1", "::1"):
                 for path in candidates:
@@ -153,50 +207,86 @@ class ControlCenter(tk.Tk):
                             last_result = f"HTTP {status} (reachable)"
                         break
                     except urllib.error.HTTPError as exc:
-                        # An HTTP error still proves the server answered; it does not prove health.
-                        last_result = f"HTTP {exc.code} (reachable; health not confirmed)"
+                        last_result = (
+                            f"HTTP {exc.code} (reachable; health not confirmed)"
+                        )
                         if exc.code in (401, 403):
                             break
                     except (urllib.error.URLError, TimeoutError, OSError):
                         continue
+
                 if last_result != "No HTTP response":
                     break
+
             return port, last_result
 
         def worker() -> None:
-            results = [(name, *probe(name, port)) for name, port in SERVICES]
+            results = [
+                (name, *probe(name, port)) for name, port in SERVICES
+            ]
+
             def update_ui() -> None:
-                for name, port, result in results:
+                for _name, port, result in results:
                     self.table.set(str(port), "http", result)
-                good = sum(1 for _, _, result in results if result == "HEALTH ENDPOINT 200")
-                reachable = sum(1 for _, _, result in results if result != "No HTTP response")
-                self.write_log(
-                    f"HTTP checks complete: {reachable}/{len(SERVICES)} endpoints responded; "
-                    f"{good} returned Actuator health HTTP 200. HTTP reachability alone does not prove application or database health."
+                good = sum(
+                    1
+                    for _name, _port, result in results
+                    if result == "HEALTH ENDPOINT 200"
                 )
+                reachable = sum(
+                    1 for _name, _port, result in results
+                    if result != "No HTTP response"
+                )
+                self.write_log(
+                    f"HTTP checks complete: {reachable}/{len(SERVICES)} endpoints "
+                    f"responded; {good} returned Actuator health HTTP 200. "
+                    "HTTP reachability alone does not prove application or database health."
+                )
+
             self.after(0, update_ui)
-        self.write_log("Starting HTTP checks (Actuator first; fallback paths indicate reachability only).")
+
+        self.write_log(
+            "Starting HTTP checks (Actuator first; fallback paths indicate reachability only)."
+        )
         threading.Thread(target=worker, daemon=True).start()
 
     def start_all(self) -> None:
+        """Launch missing services, leaving already-running services untouched."""
         if self.busy:
             messagebox.showinfo("Busy", "Wait for the current operation to finish.")
             return
+
         maven = find_maven()
         if not maven:
-            messagebox.showerror("Maven not found", "Maven 3.9.16 was not found in your .m2 wrapper folder.")
+            messagebox.showerror(
+                "Maven not found",
+                "Maven 3.9.16 was not found in your .m2 wrapper folder.",
+            )
             return
+
         env = os.environ.copy()
-        for key, label in [("DB_PASSWORD", "Database password"), ("JWT_SECRET", "JWT signing secret"), ("APP_PROVISIONING_SECRET", "Provisioning secret")]:
+        for key, label in [
+            ("DB_PASSWORD", "Database password"),
+            ("JWT_SECRET", "JWT signing secret"),
+            ("APP_PROVISIONING_SECRET", "Provisioning secret"),
+        ]:
             if not env.get(key):
-                value = simpledialog.askstring("Startup configuration", f"Enter {label} ({key}):", show="*", parent=self)
+                value = simpledialog.askstring(
+                    "Startup configuration",
+                    f"Enter {label} ({key}):",
+                    show="*",
+                    parent=self,
+                )
                 if value is None:
                     self.write_log("Start All cancelled; no services were launched.")
                     return
                 if not value.strip():
-                    messagebox.showerror("Missing configuration", f"{key} cannot be empty.")
+                    messagebox.showerror(
+                        "Missing configuration", f"{key} cannot be empty."
+                    )
                     return
                 env[key] = value
+
         definitions = [
             ("Eureka", 8761, BACKEND / "eureka-server", True),
             ("Tenant Service", 8086, BACKEND / "tenant-service", True),
@@ -208,151 +298,332 @@ class ControlCenter(tk.Tk):
             ("API Gateway", 8080, BACKEND / "api-gateway", True),
             ("React Frontend", 5173, FRONTEND, False),
         ]
-        for name, port, folder, is_backend in definitions:
+
+        for name, _port, folder, is_backend in definitions:
             if is_backend and not (folder / "pom.xml").is_file():
                 messagebox.showerror("Missing service", f"Missing pom.xml: {folder}")
                 return
-        if not (FRONTEND / "package.json").is_file():
-            messagebox.showerror("Missing frontend", f"Missing {FRONTEND / 'package.json'}")
-            return
-        self.busy = True
-        self.write_log("Start All requested. Existing listening services will be skipped.")
-        threading.Thread(target=self._start_worker, args=(definitions, maven, env), daemon=True).start()
+            if not is_backend and not (folder / "package.json").is_file():
+                messagebox.showerror(
+                    "Missing frontend", f"Missing {folder / 'package.json'}"
+                )
+                return
 
-    def _start_worker(self, definitions, maven, env):
+        self.busy = True
+        self.write_log(
+            "Start All requested. Existing listening services will be skipped."
+        )
+        threading.Thread(
+            target=self._start_worker, args=(definitions, maven, env), daemon=True
+        ).start()
+
+    def _start_worker(self, definitions, maven: Path, env: dict[str, str]) -> None:
+        """Start services sequentially and collect each process's output."""
         try:
             for name, port, folder, is_backend in definitions:
                 if port_is_open(port):
-                    self.after(0, lambda name=name, port=port: self.write_log(f"{name}: already listening on {port}; skipped."))
+                    self.after(
+                        0,
+                        lambda name=name, port=port: self.write_log(
+                            f"{name}: already listening on {port}; skipped."
+                        ),
+                    )
                     continue
+
                 if is_backend:
-                    command = [os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c", '"' + str(maven) + '" -B -ntp spring-boot:run']
+                    # .cmd files need cmd.exe on Windows. shell=True lets Python
+                    # construct the cmd.exe invocation without literal backslash quotes.
+                    command = f'call "{maven}" -B -ntp spring-boot:run'
                 else:
-                    command = [os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c", "npm run dev -- --host localhost"]
+                    command = "npm run dev -- --host localhost"
+
                 try:
-                    proc = subprocess.Popen(command, cwd=str(folder), env=env, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+                    proc = subprocess.Popen(
+                        command,
+                        cwd=str(folder),
+                        env=env,
+                        shell=True,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        errors="replace",
+                        creationflags=getattr(
+                            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                        ),
+                    )
                 except Exception as exc:
-                    self.after(0, lambda name=name, exc=exc: self.write_log(f"{name}: launch failed ({type(exc).__name__})."))
+                    self.after(
+                        0,
+                        lambda name=name, exc=exc: self.write_log(
+                            f"{name}: launch failed ({type(exc).__name__})."
+                        ),
+                    )
                     continue
+
                 self.managed_processes[name] = proc
-                threading.Thread(target=self._read_output, args=(name, proc), daemon=True).start()
-                self.after(0, lambda name=name, port=port, pid=proc.pid: self.write_log(f"{name}: launched PID {pid}; waiting for port {port}."))
-                deadline = time.monotonic() + (60 if is_backend else 25)
+                threading.Thread(
+                    target=self._read_output, args=(name, proc), daemon=True
+                ).start()
+                self.after(
+                    0,
+                    lambda name=name, port=port, pid=proc.pid: self.write_log(
+                        f"{name}: launched PID {pid}; waiting for port {port}."
+                    ),
+                )
+
+                deadline = time.monotonic() + (90 if is_backend else 35)
                 while time.monotonic() < deadline:
                     if port_is_open(port):
-                        self.after(0, lambda name=name, port=port: self.write_log(f"{name}: listening on port {port}."))
+                        self.after(
+                            0,
+                            lambda name=name, port=port: self.write_log(
+                                f"{name}: listening on port {port}."
+                            ),
+                        )
                         break
                     if proc.poll() is not None:
-                        self.after(0, lambda name=name: self.write_log(f"{name}: launcher exited before port became available; inspect logs."))
+                        self.after(
+                            0,
+                            lambda name=name: self.write_log(
+                                f"{name}: launcher exited before port became available; "
+                                "inspect logs."
+                            ),
+                        )
                         break
                     time.sleep(1)
                 else:
-                    self.after(0, lambda name=name, port=port: self.write_log(f"{name}: startup timed out on port {port}; continuing."))
+                    self.after(
+                        0,
+                        lambda name=name, port=port: self.write_log(
+                            f"{name}: startup timed out on port {port}; continuing."
+                        ),
+                    )
+
             self.after(0, self.refresh_status)
             self.after(0, lambda: self.write_log("Start All sequence finished."))
+        except Exception as exc:
+            self.after(
+                0,
+                lambda exc=exc: self.write_log(
+                    f"Start sequence error: {type(exc).__name__}."
+                ),
+            )
         finally:
             self.after(0, self._idle)
 
-    def _read_output(self, name, proc):
+    def _read_output(self, name: str, proc: subprocess.Popen) -> None:
+        """Forward child output to the UI while redacting likely secrets."""
         if proc.stdout is not None:
             for line in proc.stdout:
-                self.after(0, lambda line=line, name=name: self.write_log(f"[{name}] {line.rstrip()}"))
+                self.after(
+                    0,
+                    lambda line=line, name=name: self.write_log(
+                        f"[{name}] {line.rstrip()}"
+                    ),
+                )
 
-    def _idle(self):
+    def _idle(self) -> None:
         self.busy = False
 
     def stop_all(self) -> None:
+        """Stop only process trees launched by this Control Center."""
         if self.busy:
             messagebox.showinfo("Busy", "Wait for the current operation to finish.")
             return
-        active = [(name, proc) for name, proc in self.managed_processes.items() if proc.poll() is None]
-        if not active:
-            messagebox.showinfo("Nothing to stop", "No running services were launched by this Control Center. Services started elsewhere were left untouched.")
-            self.write_log("Stop All: no managed processes to stop; independent services untouched.")
-            return
-        if not messagebox.askyesno("Confirm Stop All", f"Stop {len(active)} process tree(s) launched by this Control Center? Independently started services will not be targeted."):
-            return
-        self.busy = True
-        threading.Thread(target=self._stop_worker, args=(active,), daemon=True).start()
 
-    def _stop_worker(self, active):
+        active = [
+            (name, proc)
+            for name, proc in self.managed_processes.items()
+            if proc.poll() is None
+        ]
+        if not active:
+            messagebox.showinfo(
+                "Nothing to stop",
+                "No running services were launched by this Control Center. "
+                "Services started elsewhere were left untouched.",
+            )
+            self.write_log(
+                "Stop All: no managed processes to stop; independent services untouched."
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Confirm Stop All",
+            f"Stop {len(active)} process tree(s) launched by this Control Center? "
+            "Independently started services will not be targeted.",
+        ):
+            return
+
+        self.busy = True
+        threading.Thread(
+            target=self._stop_worker, args=(active,), daemon=True
+        ).start()
+
+    def _stop_worker(self, active) -> None:
         try:
             for name, proc in reversed(active):
                 if proc.poll() is None:
                     try:
-                        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, text=True, timeout=15, check=False)
-                        self.after(0, lambda name=name, pid=proc.pid: self.write_log(f"{name}: stop requested for managed process tree PID {pid}."))
+                        subprocess.run(
+                            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                            capture_output=True,
+                            text=True,
+                            timeout=15,
+                            check=False,
+                        )
+                        self.after(
+                            0,
+                            lambda name=name, pid=proc.pid: self.write_log(
+                                f"{name}: stop requested for managed process tree PID {pid}."
+                            ),
+                        )
                     except Exception as exc:
-                        self.after(0, lambda name=name, exc=exc: self.write_log(f"{name}: stop request failed ({type(exc).__name__})."))
+                        self.after(
+                            0,
+                            lambda name=name, exc=exc: self.write_log(
+                                f"{name}: stop request failed ({type(exc).__name__})."
+                            ),
+                        )
+
             time.sleep(1)
             self.after(0, self.refresh_status)
-            self.after(0, lambda: self.write_log("Stop All finished; independently started services were not targeted."))
+            self.after(
+                0,
+                lambda: self.write_log(
+                    "Stop All finished; independently started services were not targeted."
+                ),
+            )
         finally:
             self.after(0, self._idle)
 
-    def run_commands(self, title: str, commands: list[tuple[str, list[str], Path]]) -> None:
+    def run_commands(
+        self, title: str, commands: list[tuple[str, list[str], Path]]
+    ) -> None:
+        """Run validation commands in background threads and log their output."""
         def worker() -> None:
             self.after(0, lambda: self.write_log(f"\n=== {title} started ==="))
             failed = False
+
             for label, command, cwd in commands:
                 self.after(0, lambda label=label: self.write_log(f"\n--- {label} ---"))
                 try:
                     process = subprocess.Popen(
-                        command, cwd=str(cwd), stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT, text=True, errors="replace",
-                        env=os.environ.copy(), shell=False,
+                        command,
+                        cwd=str(cwd),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        errors="replace",
+                        env=os.environ.copy(),
+                        shell=False,
                     )
                     assert process.stdout is not None
                     for line in process.stdout:
-                        self.after(0, lambda line=line: self.write_log(line))
+                        self.after(
+                            0,
+                            lambda line=line: self.write_log(line.rstrip()),
+                        )
                     code = process.wait()
                     if code != 0:
                         failed = True
-                        self.after(0, lambda label=label, code=code: self.write_log(f"{label} FAILED (exit {code})"))
+                        self.after(
+                            0,
+                            lambda label=label, code=code: self.write_log(
+                                f"{label} FAILED (exit {code})"
+                            ),
+                        )
                     else:
-                        self.after(0, lambda label=label: self.write_log(f"{label} PASSED"))
+                        self.after(
+                            0,
+                            lambda label=label: self.write_log(
+                                f"{label} PASSED"
+                            ),
+                        )
                 except Exception as exc:
                     failed = True
-                    self.after(0, lambda label=label, exc=exc: self.write_log(f"{label}: could not run ({type(exc).__name__}). Check paths and installed tools."))
+                    self.after(
+                        0,
+                        lambda label=label, exc=exc: self.write_log(
+                            f"{label}: could not run ({type(exc).__name__}). "
+                            "Check paths and installed tools."
+                        ),
+                    )
+
             result = "finished with failures" if failed else "completed successfully"
             self.after(0, lambda: self.write_log(f"=== {title} {result} ==="))
-            self.after(0, lambda: messagebox.showinfo(title, f"{title} {result}. See Activity log for details."))
+            self.after(
+                0,
+                lambda: messagebox.showinfo(
+                    title, f"{title} {result}. See Activity log for details."
+                ),
+            )
+
         threading.Thread(target=worker, daemon=True).start()
 
     def run_backend_tests(self) -> None:
+        """Run Maven tests for each backend service that exists."""
         maven = find_maven()
         if not maven:
             messagebox.showerror(
                 "Maven not found",
-                "Could not find Maven 3.9.16 under your user .m2 wrapper folder. No command was run.",
+                "Could not find Maven 3.9.16 under your user .m2 wrapper folder. "
+                "No command was run.",
             )
             return
+
         service_names = [
-            "user-service", "tenant-service", "vendor-service",
-            "product-service", "order-service", "payment-service",
+            "user-service",
+            "tenant-service",
+            "vendor-service",
+            "product-service",
+            "order-service",
+            "payment-service",
         ]
         commands = []
         for service in service_names:
             folder = BACKEND / service
             if (folder / "pom.xml").is_file():
-                commands.append((f"{service} tests", [str(maven), "-B", "-ntp", "test"], folder))
+                commands.append(
+                    (f"{service} tests", [str(maven), "-B", "-ntp", "test"], folder)
+                )
             else:
                 self.write_log(f"Skipped {service}: pom.xml not found.")
+
         if not commands:
-            messagebox.showerror("No services found", "No service pom.xml files were found under backend.")
+            messagebox.showerror(
+                "No services found",
+                "No service pom.xml files were found under backend.",
+            )
             return
+
         self.run_commands("Backend tests", commands)
 
     def build_frontend(self) -> None:
+        """Run the frontend production build."""
         package_file = FRONTEND / "package.json"
         if not package_file.is_file():
-            messagebox.showerror("Frontend not found", f"Missing {package_file}")
+            messagebox.showerror(
+                "Frontend not found", f"Missing {package_file}"
+            )
             return
-        npm = os.environ.get("ComSpec", "cmd.exe")
-        self.run_commands("Frontend build", [("npm run build", [npm, "/d", "/s", "/c", "npm run build"], FRONTEND)])
+
+        command_shell = os.environ.get("ComSpec", r"C:\Windows\System32\cmd.exe")
+        self.run_commands(
+            "Frontend build",
+            [
+                (
+                    "npm run build",
+                    [command_shell, "/d", "/s", "/c", "npm run build"],
+                    FRONTEND,
+                )
+            ],
+        )
 
 
 if __name__ == "__main__":
     if not BACKEND.is_dir() or not FRONTEND.is_dir():
-        raise SystemExit("Run this tool from its repository location: tools/marketgrid-control-center.py")
+        raise SystemExit(
+            "Run this tool from its repository location: tools/marketgrid-control-center.py"
+        )
     ControlCenter().mainloop()
