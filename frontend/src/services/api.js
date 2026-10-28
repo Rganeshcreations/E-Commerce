@@ -134,9 +134,27 @@ export const api = {
       method: "DELETE"
     }),
 
-  // Vendors
+  // Vendors and tenant-scoped vendor applications
   vendors: () => request("/api/vendors"),
   myVendor: () => request("/api/vendors/me"),
+  activeTenants: () => request("/api/tenants/active"),
+  submitVendorApplication: (body) =>
+    request("/api/vendors/applications", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  vendorApplications: () => request("/api/vendors/applications"),
+  pendingVendorApplications: () => request("/api/vendors/applications/pending"),
+  approveVendorApplication: (id, message = "") =>
+    request(`/api/vendors/applications/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ message })
+    }),
+  rejectVendorApplication: (id, message) =>
+    request(`/api/vendors/applications/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ message })
+    }),
 
   // Payments
   createPayment: (body) =>
