@@ -36,16 +36,30 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
+                        // Vendor can access their own profile.
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vendors/me")
                         .hasRole("VENDOR")
+
+                        // A prospective vendor may submit an application without an account token.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/vendors/applications")
+                        .permitAll()
+
+                        // Only tenant administrators can review vendor applications.
+                        .requestMatchers("/api/vendors/applications/**")
+                        .hasRole("TENANT_ADMIN")
+
+                        // Read vendor data.
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vendors/**")
                         .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN", "VENDOR", "CUSTOMER")
+
+                        // Vendor profile mutations remain administrator-only.
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/vendors/**")
                         .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
                         .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/vendors/**")
                         .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/vendors/**")
                         .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
+
                         .anyRequest().authenticated()
                 )
 
