@@ -32,6 +32,14 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/vendor-application")
+    public ResponseEntity<UserResponse> registerPendingVendor(
+            @RequestBody RegisterRequest request) {
+        User createdUser = authService.registerPendingVendor(request);
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(new UserResponse(createdUser));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
             @RequestBody LoginRequest request) {
