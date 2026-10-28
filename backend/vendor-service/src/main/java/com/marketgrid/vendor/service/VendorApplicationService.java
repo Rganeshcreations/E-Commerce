@@ -22,8 +22,8 @@ public class VendorApplicationService {
 
     @Transactional
     public VendorApplication submit(SubmitRequest r){
-        if(r==null||blank(r.tenantSlug())||blank(r.applicantName())||blank(r.email())||blank(r.businessName()))
-            throw new IllegalArgumentException("Name, email, business name and store slug are required");
+        if(r==null||blank(r.tenantSlug())||blank(r.applicantName())||blank(r.email())||blank(r.businessName())||blank(r.password())||r.password().length()<8)
+            throw new IllegalArgumentException("Name, email, business name, store and password of at least 8 characters are required");
         TenantLookup tenant;
         try { tenant=restClient.get().uri("http://localhost:8086/api/tenants/slug/{slug}",r.tenantSlug().trim()).retrieve().body(TenantLookup.class); }
         catch(RestClientException ex){throw new IllegalStateException("Unable to verify the selected store. Please try again.");}
@@ -31,6 +31,13 @@ public class VendorApplicationService {
         String email=r.email().trim().toLowerCase(Locale.ROOT);
         if(applications.existsByTenantIdAndEmailAndStatus(tenant.id(),email,VendorApplication.Status.PENDING))
             throw new IllegalArgumentException("A pending application already exists for this email and store");
+        try {
+            restClient.post().uri("http://localhost:8080/api/auth/vendor-application")
+                .body(new PendingVendorRequest(r.tenantSlug().trim(), r.applicantName().trim(), email, r.password()))
+                .retrieve().toBodilessEntity();
+        } catch(RestClientException ex) {
+            throw new IllegalStateException("Unable to create pending vendor login. Check User Service and try again.");
+        }
         VendorApplication a=new VendorApplication(); a.setTenantId(tenant.id()); a.setApplicantName(r.applicantName().trim()); a.setEmail(email); a.setBusinessName(r.businessName().trim());
         return applications.save(a);
     }
@@ -38,12 +45,19 @@ public class VendorApplicationService {
         Long tenant=requiredTenant();
         return pending?applications.findAllByTenantIdAndStatusOrderBySubmittedAtDesc(tenant,VendorApplication.Status.PENDING):applications.findAllByTenantIdOrderBySubmittedAtDesc(tenant);
     }
-    @Transactional public VendorApplication approve(Long id, ReviewRequest r){
+    @Transactional public VendorApplication approve(Long id, ReviewRequest r, String authorization){
         Long tenant=requiredTenant();
         VendorApplication a=applications.findByIdAndTenantId(id,tenant).orElseThrow(()->new IllegalArgumentException("Application not found for this tenant"));
         ensurePending(a);
         if(vendors.findByEmailAndTenantId(a.getEmail(),tenant).isEmpty()){
             Vendor v=new Vendor(); v.setTenantId(tenant); v.setVendorName(a.getApplicantName()); v.setEmail(a.getEmail()); v.setBusinessName(a.getBusinessName()); v.setStatus("ACTIVE"); vendors.save(v);
+        }
+        try {
+            restClient.patch().uri("http://localhost:8080/api/users/vendors/activate?email={email}", a.getEmail())
+                .header("Authorization", authorization)
+                .retrieve().toBodilessEntity();
+        } catch(RestClientException ex) {
+            throw new IllegalStateException("Vendor profile was not activated because its login could not be enabled. Ensure User Service is running and retry approval.");
         }
         a.setStatus(VendorApplication.Status.APPROVED); a.setReviewMessage(message(r,false)); a.setReviewedAt(LocalDateTime.now()); return applications.save(a);
     }
@@ -55,7 +69,8 @@ public class VendorApplicationService {
     private Long requiredTenant(){Long id=TenantContext.getTenantId();if(id==null)throw new IllegalStateException("Tenant information not found in authentication token");return id;}
     private static boolean blank(String s){return s==null||s.isBlank();}
     private static String message(ReviewRequest r,boolean required){String s=r==null?null:r.message(); if(required&&blank(s))throw new IllegalArgumentException("A rejection message is required"); if(s!=null&&s.trim().length()>1000)throw new IllegalArgumentException("Review message must be 1000 characters or fewer");return blank(s)?null:s.trim();}
-    public record SubmitRequest(String tenantSlug,String applicantName,String email,String businessName){}
+    public record SubmitRequest(String tenantSlug,String applicantName,String email,String businessName,String password){}
+    public record PendingVendorRequest(String tenantSlug,String fullName,String email,String password){}
     public record ReviewRequest(String message){}
     public record TenantLookup(Long id,String name,String slug,boolean active){}
 }
