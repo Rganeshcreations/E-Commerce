@@ -75,6 +75,9 @@ class ControlCenter(tk.Tk):
         self.configure(padx=16, pady=14)
 
         self.managed_processes: dict[str, subprocess.Popen] = {}
+
+        self.startup_env = None
+        self.startup_definitions = None
         self.busy = False
 
         ttk.Label(
@@ -96,6 +99,9 @@ class ControlCenter(tk.Tk):
             side="left", padx=(0, 7)
         )
         ttk.Button(buttons, text="Stop All", command=self.stop_all).pack(
+            side="left", padx=7
+        )
+        ttk.Button(buttons, text="Restart All", command=self.restart_all).pack(
             side="left", padx=7
         )
         ttk.Button(buttons, text="Check Status", command=self.refresh_status).pack(
@@ -131,6 +137,32 @@ class ControlCenter(tk.Tk):
         self.table.column("status", width=140, anchor="center")
         self.table.column("http", width=300, anchor="center")
         self.table.pack(fill="x", pady=(0, 10))
+
+        service_controls = ttk.Frame(self)
+        service_controls.pack(fill="x", pady=(0, 10))
+        ttk.Label(service_controls, text="Selected service:").pack(side="left", padx=(0, 6))
+
+        self.service_choice = tk.StringVar()
+        self.service_selector = ttk.Combobox(
+            service_controls,
+            textvariable=self.service_choice,
+            values=[f"{name} ({port})" for name, port in SERVICES],
+            state="readonly",
+            width=22,
+        )
+        self.service_selector.pack(side="left", padx=(0, 8))
+        if SERVICES:
+            self.service_selector.current(0)
+
+        ttk.Button(
+            service_controls, text="Start Selected", command=self.start_selected
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            service_controls, text="Stop Selected", command=self.stop_selected
+        ).pack(side="left", padx=4)
+        ttk.Button(
+            service_controls, text="Restart Selected", command=self.restart_selected
+        ).pack(side="left", padx=4)
 
         for _name, port in SERVICES:
             self.table.insert(
@@ -250,6 +282,263 @@ class ControlCenter(tk.Tk):
         )
         threading.Thread(target=worker, daemon=True).start()
 
+    def _selected_definition(self):
+        choice = self.service_choice.get()
+        for definition in (self.startup_definitions or self._default_definitions()):
+            if choice == f"{definition[0]} ({definition[1]})":
+                return definition
+        messagebox.showerror("Select service", "Choose a service from the list.")
+        return None
+
+    def _default_definitions(self):
+        return [
+            ("Eureka", 8761, BACKEND / "eureka-server", True),
+            ("Tenant Service", 8086, BACKEND / "tenant-service", True),
+            ("User Service", 8081, BACKEND / "user-service", True),
+            ("Vendor Service", 8082, BACKEND / "vendor-service", True),
+            ("Product Service", 8083, BACKEND / "product-service", True),
+            ("Order Service", 8084, BACKEND / "order-service", True),
+            ("Payment Service", 8085, BACKEND / "payment-service", True),
+            ("API Gateway", 8080, BACKEND / "api-gateway", True),
+            ("React Frontend", 5173, FRONTEND, False),
+        ]
+
+    def _ensure_startup_config(self):
+        if self.startup_env and self.startup_definitions:
+            return True
+
+        maven = find_maven()
+        if not maven:
+            messagebox.showerror(
+                "Maven not found",
+                "Maven 3.9.16 was not found in your .m2 wrapper folder.",
+            )
+            return False
+
+        env = os.environ.copy()
+        for key, label in [
+            ("DB_PASSWORD", "Database password"),
+            ("JWT_SECRET", "JWT signing secret"),
+            ("APP_PROVISIONING_SECRET", "Provisioning secret"),
+        ]:
+            if not env.get(key):
+                value = simpledialog.askstring(
+                    "Startup configuration",
+                    f"Enter {label} ({key}):",
+                    show="*",
+                    parent=self,
+                )
+                if value is None or not value.strip():
+                    self.write_log("Operation cancelled; required configuration was not supplied.")
+                    return False
+                env[key] = value
+
+        definitions = self._default_definitions()
+        self.startup_env = env
+        self.startup_definitions = definitions
+        return True
+
+    def start_selected(self):
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+        if not self._ensure_startup_config():
+            return
+
+        definition = self._selected_definition()
+        if not definition:
+            return
+        name, port, folder, is_backend = definition
+
+        if port_is_open(port):
+            self.write_log(f"{name}: already listening on port {port}; no action needed.")
+            self.refresh_status()
+            return
+
+        maven = find_maven()
+        if not maven:
+            messagebox.showerror("Maven not found", "Maven 3.9.16 was not found.")
+            return
+
+        self.busy = True
+        self.write_log(f"Starting selected service: {name}.")
+        threading.Thread(
+            target=self._start_worker,
+            args=([definition], maven, self.startup_env),
+            daemon=True,
+        ).start()
+
+    def stop_selected(self):
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+
+        definition = self._selected_definition()
+        if not definition:
+            return
+        name = definition[0]
+        proc = self.managed_processes.get(name)
+
+        if proc is None or proc.poll() is not None:
+            messagebox.showinfo(
+                "Not managed",
+                f"{name} was not launched by this panel. "
+                "For safety, independently started processes are not stopped.",
+            )
+            self.write_log(f"{name}: not stopped because no live managed process was found.")
+            return
+
+        if not messagebox.askyesno("Confirm stop", f"Stop {name}?"):
+            return
+
+        self.busy = True
+        threading.Thread(
+            target=self._stop_worker, args=([(name, proc)],), daemon=True
+        ).start()
+
+    def restart_selected(self):
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+        if not self._ensure_startup_config():
+            return
+
+        definition = self._selected_definition()
+        if not definition:
+            return
+
+        name, port, folder, is_backend = definition
+        proc = self.managed_processes.get(name)
+
+        if proc is None or proc.poll() is not None:
+            self.write_log(f"{name}: not managed; starting it if its port is free.")
+            self.start_selected()
+            return
+
+        if not messagebox.askyesno("Confirm restart", f"Restart {name}?"):
+            return
+
+        maven = find_maven()
+        if not maven:
+            messagebox.showerror("Maven not found", "Maven 3.9.16 was not found.")
+            return
+
+        self.busy = True
+        threading.Thread(
+            target=self._restart_worker,
+            args=(definition, proc, maven, self.startup_env),
+            daemon=True,
+        ).start()
+
+    def _restart_worker(self, definition, proc, maven, env):
+        name, port, folder, is_backend = definition
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, text=True, timeout=15, check=False,
+            )
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and port_is_open(port):
+                time.sleep(0.5)
+
+            if port_is_open(port):
+                self.after(0, lambda: self.write_log(
+                    f"{name}: port {port} remains busy; restart aborted."
+                ))
+                self.after(0, self.refresh_status)
+                return
+
+            self.managed_processes.pop(name, None)
+            self.after(0, lambda: self.write_log(f"{name}: stopped; starting again."))
+            self._start_worker([definition], maven, env)
+            return
+        except Exception as exc:
+            self.after(0, lambda: self.write_log(
+                f"{name}: restart failed ({type(exc).__name__})."
+            ))
+        finally:
+            self.after(0, self._idle)
+
+    def restart_all(self):
+        if self.busy:
+            messagebox.showinfo("Busy", "Wait for the current operation to finish.")
+            return
+        if not self._ensure_startup_config():
+            return
+
+        active = [
+            (name, proc)
+            for name, proc in self.managed_processes.items()
+            if proc.poll() is None
+        ]
+        if not active:
+            messagebox.showinfo(
+                "Nothing to restart",
+                "No running services launched by this panel. Use Start All to launch them.",
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Confirm Restart All",
+            f"Restart {len(active)} service process tree(s) managed by this panel? "
+            "Independently started services will not be stopped.",
+        ):
+            return
+
+        maven = find_maven()
+        if not maven:
+            messagebox.showerror("Maven not found", "Maven 3.9.16 was not found.")
+            return
+
+        self.busy = True
+        threading.Thread(
+            target=self._restart_all_worker,
+            args=(active, maven, self.startup_env, self.startup_definitions),
+            daemon=True,
+        ).start()
+
+    def _restart_all_worker(self, active, maven, env, definitions):
+        try:
+            ports = {name: port for name, port, _folder, _backend in definitions}
+            for name, proc in reversed(active):
+                if proc.poll() is None:
+                    subprocess.run(
+                        ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                        capture_output=True, text=True, timeout=15, check=False,
+                    )
+                    self.after(0, lambda name=name: self.write_log(
+                        f"{name}: stop requested."
+                    ))
+
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                if all(not port_is_open(ports[name]) for name, _proc in active):
+                    break
+                time.sleep(0.5)
+
+            still_open = [
+                name for name, _proc in active
+                if port_is_open(ports[name])
+            ]
+            if still_open:
+                self.after(0, lambda: self.write_log(
+                    "Restart stopped: ports still busy for " + ", ".join(still_open)
+                ))
+                self.after(0, self.refresh_status)
+                return
+
+            for name, _proc in active:
+                self.managed_processes.pop(name, None)
+
+            self.after(0, lambda: self.write_log("Restarting managed services in parallel."))
+            self._start_worker(definitions, maven, env)
+            return
+        except Exception as exc:
+            self.after(0, lambda: self.write_log(
+                f"Restart All failed ({type(exc).__name__})."
+            ))
+        finally:
+            self.after(0, self._idle)
     def start_all(self) -> None:
         """Launch missing services, leaving already-running services untouched."""
         if self.busy:
@@ -309,6 +598,9 @@ class ControlCenter(tk.Tk):
                 )
                 return
 
+        self.startup_env = env.copy()
+        self.startup_definitions = definitions
+
         self.busy = True
         self.write_log(
             "Start All requested. Existing listening services will be skipped."
@@ -318,8 +610,12 @@ class ControlCenter(tk.Tk):
         ).start()
 
     def _start_worker(self, definitions, maven: Path, env: dict[str, str]) -> None:
-        """Start services sequentially and collect each process's output."""
+        """Launch all eligible services first, then monitor them concurrently."""
         try:
+            pending = {}
+            launched_count = 0
+
+            # Phase 1: launch every eligible service without waiting for ports.
             for name, port, folder, is_backend in definitions:
                 if port_is_open(port):
                     self.after(
@@ -331,8 +627,6 @@ class ControlCenter(tk.Tk):
                     continue
 
                 if is_backend:
-                    # .cmd files need cmd.exe on Windows. shell=True lets Python
-                    # construct the cmd.exe invocation without literal backslash quotes.
                     command = f'call "{maven}" -B -ntp spring-boot:run'
                 else:
                     command = "npm run dev -- --host localhost"
@@ -363,17 +657,42 @@ class ControlCenter(tk.Tk):
 
                 self.managed_processes[name] = proc
                 threading.Thread(
-                    target=self._read_output, args=(name, proc), daemon=True
+                    target=self._read_output,
+                    args=(name, proc),
+                    daemon=True,
                 ).start()
+
+                timeout = 90 if is_backend else 35
+                pending[name] = {
+                    "port": port,
+                    "proc": proc,
+                    "deadline": time.monotonic() + timeout,
+                }
+                launched_count += 1
+
                 self.after(
                     0,
                     lambda name=name, port=port, pid=proc.pid: self.write_log(
-                        f"{name}: launched PID {pid}; waiting for port {port}."
+                        f"{name}: launched PID {pid}; monitoring port {port}."
                     ),
                 )
 
-                deadline = time.monotonic() + (90 if is_backend else 35)
-                while time.monotonic() < deadline:
+            # Phase 2: monitor all launched services in one shared loop.
+            self.after(
+                0,
+                lambda count=launched_count: self.write_log(
+                    f"Parallel launch complete: {count} service process(es) launched. "
+                    "Monitoring readiness."
+                ),
+            )
+
+            while pending:
+                now = time.monotonic()
+
+                for name, state in list(pending.items()):
+                    port = state["port"]
+                    proc = state["proc"]
+
                     if port_is_open(port):
                         self.after(
                             0,
@@ -381,37 +700,45 @@ class ControlCenter(tk.Tk):
                                 f"{name}: listening on port {port}."
                             ),
                         )
-                        break
-                    if proc.poll() is not None:
+                        pending.pop(name, None)
+                    elif proc.poll() is not None:
                         self.after(
                             0,
                             lambda name=name: self.write_log(
-                                f"{name}: launcher exited before port became available; "
-                                "inspect logs."
+                                f"{name}: launcher exited before its port became "
+                                "available; inspect logs."
                             ),
                         )
-                        break
-                    time.sleep(1)
-                else:
-                    self.after(
-                        0,
-                        lambda name=name, port=port: self.write_log(
-                            f"{name}: startup timed out on port {port}; continuing."
-                        ),
-                    )
+                        pending.pop(name, None)
+                    elif now >= state["deadline"]:
+                        self.after(
+                            0,
+                            lambda name=name, port=port: self.write_log(
+                                f"{name}: startup timed out on port {port}; "
+                                "the process may still be running."
+                            ),
+                        )
+                        pending.pop(name, None)
+
+                if pending:
+                    time.sleep(0.5)
 
             self.after(0, self.refresh_status)
-            self.after(0, lambda: self.write_log("Start All sequence finished."))
+            self.after(
+                0,
+                lambda: self.write_log(
+                    "Parallel startup monitoring finished."
+                ),
+            )
         except Exception as exc:
             self.after(
                 0,
                 lambda exc=exc: self.write_log(
-                    f"Start sequence error: {type(exc).__name__}."
+                    f"Startup error: {type(exc).__name__}."
                 ),
             )
         finally:
             self.after(0, self._idle)
-
     def _read_output(self, name: str, proc: subprocess.Popen) -> None:
         """Forward child output to the UI while redacting likely secrets."""
         if proc.stdout is not None:

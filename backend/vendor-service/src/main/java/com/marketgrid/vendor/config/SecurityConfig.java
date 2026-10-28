@@ -41,6 +41,9 @@ public class SecurityConfig {
                         .hasRole("VENDOR")
 
                         // A prospective vendor may submit an application without an account token.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/vendors/register")
+                        .permitAll()
+
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/vendors/applications")
                         .permitAll()
 

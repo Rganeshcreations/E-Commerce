@@ -102,7 +102,7 @@ public class AuthService {
             }
 
             user.setTenantId(null);
-            user.setRole("TENANT_APPLICANT");
+            user.setRole("CUSTOMER");
 
         } else {
             TenantLookupResponse tenant =

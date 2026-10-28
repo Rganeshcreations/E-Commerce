@@ -135,6 +135,7 @@ export const api = {
   vendors: () => request("/api/vendors"),
   myVendor: () => request("/api/vendors/me"),
   activeTenants: () => request("/api/tenants/active"),
+  registerVendor: (body) => request("/api/vendors/register", { method: "POST", body: JSON.stringify(body) }),
   submitVendorApplication: (body) =>
     request("/api/vendors/applications", {
       method: "POST",

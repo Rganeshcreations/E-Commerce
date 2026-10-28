@@ -422,7 +422,7 @@ function Register() {
           fullName: form.fullName.trim(),
           email: form.email.trim().toLowerCase(),
           password: form.password,
-          tenantSlug: form.tenantSlug.trim()
+
         });
         setMessage("Customer account created. You can now sign in.");
         window.setTimeout(() => navigate("/login", { replace: true }), 900);
@@ -458,14 +458,32 @@ function Register() {
           navigate("/tenant-applicant", { replace: true });
         }
       } else {
-        await api.submitVendorApplication({
-          applicantName: form.fullName.trim(),
-          email: form.email.trim().toLowerCase(),
-          tenantSlug: form.tenantSlug,
-          businessName: form.businessName.trim(),
-          password: form.password
-        });
-        setMessage("Vendor application submitted. Your selected store administrator must review your request.");
+        const registered = await api.registerVendor({
+  fullName: form.fullName.trim(),
+  email: form.email.trim().toLowerCase(),
+  tenantSlug: form.tenantSlug,
+  businessName: form.businessName.trim(),
+  password: form.password
+});
+
+const session = await api.login({
+  email: form.email.trim().toLowerCase(),
+  password: form.password,
+  tenantId: registered.tenantId
+});
+
+if (!session || !session.token || session.role !== "VENDOR") {
+  throw new Error("Registration succeeded, but automatic login failed. Please log in manually.");
+}
+
+localStorage.setItem("marketgrid_token", session.token);
+localStorage.setItem("marketgrid_role", session.role);
+localStorage.setItem("marketgrid_user_id", String(session.userId ?? ""));
+localStorage.setItem("marketgrid_customer_id", String(session.userId ?? ""));
+localStorage.setItem("marketgrid_tenant", String(session.tenantId ?? registered.tenantId));
+localStorage.setItem("marketgrid_email", session.email || form.email.trim().toLowerCase());
+
+navigate("/vendor", { replace: true });
       }
     } catch (err) {
       setError(err.message || "Registration could not be completed. Please check your details.");
@@ -553,13 +571,6 @@ function Register() {
 
           {accountType === "CUSTOMER" && <>
             <label>
-              Store
-              <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required disabled={loadingOptions}>
-                <option value="">{loadingOptions ? "Loading stores..." : "Select a store"}</option>
-                {activeTenants.map(tenant => <option key={tenant.id} value={tenant.slug}>{tenant.name} ({tenant.slug})</option>)}
-              </select>
-            </label>
-            <label>
               Password
               <input type="password" name="password" value={form.password} onChange={updateField}
                 autoComplete="new-password" placeholder="At least 8 characters" minLength="8" maxLength="72" required />
@@ -597,7 +608,7 @@ function Register() {
               <input name="businessName" value={form.businessName} onChange={updateField}
                 placeholder="Your shop or business name" required />
             </label>
-            <p className="muted">Vendor access is not created immediately. The store administrator must review your application.</p>
+            <p className="muted">Your vendor account will be created immediately for the selected active store.</p>
           </>}
 
           {accountType === "TENANT_ADMIN" && <>
@@ -640,7 +651,7 @@ function Register() {
 
           <button className="primary-btn full" type="submit" disabled={loading || loadingOptions}>
             {loading ? "Submitting..." : accountType === "CUSTOMER" ? "Create Customer Account" :
-              accountType === "VENDOR" ? "Submit Vendor Application" : "Submit Store Application"}
+              accountType === "VENDOR" ? "Register as Vendor" : "Submit Store Application"}
           </button>
         </form>
 
@@ -738,7 +749,7 @@ function CustomerDashboard() {
               margin: "10px 0 8px"
             }}
           >
-            Welcome back, {customerName} Ã°Å¸â€˜â€¹
+            Welcome back, {customerName}!
           </h1>
 
           <p
@@ -1441,7 +1452,7 @@ function CustomerShop() {
                 }}
               >
                 <ShoppingCart size={15}/>
-                {addedId === p.id ? "Added ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : p.stock <= 0 ? "Sold Out" : "Add"}
+                {addedId === p.id ? "Added successfully" : p.stock <= 0 ? "Sold Out" : "Add"}
               </button>
 
             </div>
@@ -2679,7 +2690,7 @@ function Orders() {
                 >
                   Tenant #{order.tenantId}
                   <span style={{ margin: "0 8px" }}>
-                    ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢
+                    -
                   </span>
                   {order.items?.length || 0} item
                   {(order.items?.length || 0) !== 1
@@ -3031,7 +3042,7 @@ function Dashboard({ type }) {
                     <td>
                       <b>{product.name ?? product.productName ?? `Product #${product.id}`}</b>
                     </td>
-                    <td>{product.vendorId ?? "Ã¢â‚¬â€"}</td>
+                    <td>{product.vendorId ?? "N/A"}</td>
                     <td>
                       {formatINR(product.price ?? 0)}
                     </td>
