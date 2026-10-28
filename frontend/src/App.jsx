@@ -419,8 +419,8 @@ function Register() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.tenants()
-      .then(data => setTenants(Array.isArray(data) ? data.filter(t => t.active) : []))
+    api.activeTenants()
+      .then(data => setTenants(Array.isArray(data) ? data : []))
       .catch(error => setMessage(`Unable to load active stores: ${error.message}`));
   }, []);
 
