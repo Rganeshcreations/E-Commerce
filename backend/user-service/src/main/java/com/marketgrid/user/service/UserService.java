@@ -144,6 +144,24 @@ public class UserService {
         return userRepository.save(existing);
     }
 
+    public User activateVendorByEmail(String email) {
+        if (!"TENANT_ADMIN".equals(currentRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only tenant administrators can activate vendor accounts");
+        }
+        Long tenantId = requireTenant();
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        if (normalizedEmail.isBlank()) {
+            throw badRequest("Email is required");
+        }
+        User vendor = userRepository.findByEmailAndTenantId(normalizedEmail, tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor account not found for this store"));
+        if (!"VENDOR".equals(vendor.getRole())) {
+            throw badRequest("The account is not a vendor");
+        }
+        vendor.setActive(true);
+        return userRepository.save(vendor);
+    }
+
     public void deleteUser(Long id) {
         User existing = findManageableUser(id);
         if ("SUPER_ADMIN".equals(existing.getRole())) {
