@@ -30,7 +30,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/tenants/slug/**").permitAll()
+                .requestMatchers("/api/tenants/slug/**", "/api/tenants/active").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/tenants").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/domains").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/domains").hasRole("SUPER_ADMIN")
