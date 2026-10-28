@@ -33,7 +33,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/tenants/slug/**").permitAll()
+                .requestMatchers("/api/tenants/slug/**", "/api/tenants/active").permitAll()
 
                 // Public access only to application submission.
                 .requestMatchers(HttpMethod.POST, "/api/tenant-applications").permitAll()
