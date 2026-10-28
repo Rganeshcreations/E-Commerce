@@ -42,18 +42,19 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PatchMapping("/vendors/activate")
+    public ResponseEntity<UserResponse> activateVendor(
+            @RequestParam String email) {
+        User activatedUser = userService.activateVendorByEmail(email);
+        return ResponseEntity.ok(new UserResponse(activatedUser));
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
             @RequestBody User user) {
-
         User updatedUser = userService.updateUser(id, user);
         return ResponseEntity.ok(new UserResponse(updatedUser));
-    }
-
-    @PatchMapping("/vendors/activate")
-    public ResponseEntity<UserResponse> activateVendor(@RequestParam String email) {
-        return ResponseEntity.ok(new UserResponse(userService.activateVendorByEmail(email)));
     }
 
     @DeleteMapping("/{id}")

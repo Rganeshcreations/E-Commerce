@@ -1,4 +1,5 @@
 
+
 package com.marketgrid.user.controller;
 
 import com.marketgrid.user.dto.LoginRequest;
@@ -8,6 +9,7 @@ import com.marketgrid.user.dto.UserResponse;
 import com.marketgrid.user.entity.User;
 import com.marketgrid.user.service.AuthService;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,8 +35,13 @@ public class AuthController {
     }
 
     @PostMapping("/vendor-application")
-    public ResponseEntity<UserResponse> registerPendingVendor(@RequestBody RegisterRequest request) {
-        return ResponseEntity.status(201).body(new UserResponse(authService.registerPendingVendor(request)));
+    public ResponseEntity<UserResponse> registerPendingVendor(
+            @RequestBody RegisterRequest request) {
+
+        User createdUser = authService.registerPendingVendor(request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new UserResponse(createdUser));
     }
 
     @PostMapping("/login")

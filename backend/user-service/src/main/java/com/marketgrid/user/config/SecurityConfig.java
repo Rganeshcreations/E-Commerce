@@ -50,6 +50,8 @@ public class SecurityConfig {
     .requestMatchers("/api/auth/**").permitAll()
     .requestMatchers("/internal/provisioning/**").permitAll()
     .requestMatchers("/error").permitAll()
+    .requestMatchers(org.springframework.http.HttpMethod.PATCH, "/api/users/vendors/activate")
+    .hasRole("TENANT_ADMIN")
     .requestMatchers("/api/users/**")
     .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN")
     .anyRequest().authenticated()
