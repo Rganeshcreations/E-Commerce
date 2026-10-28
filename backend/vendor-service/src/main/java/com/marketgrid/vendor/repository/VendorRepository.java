@@ -10,6 +10,9 @@ public interface VendorRepository extends JpaRepository<Vendor, Long> {
 
     List<Vendor> findAllByTenantId(Long tenantId);
 
+    // Public marketplace discovery: active vendors only.
+    List<Vendor> findAllByStatusIgnoreCase(String status);
+
     Optional<Vendor> findByIdAndTenantId(Long id, Long tenantId);
 
     Optional<Vendor> findByEmailAndTenantId(String email, Long tenantId);

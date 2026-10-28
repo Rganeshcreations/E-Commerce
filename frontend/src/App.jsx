@@ -49,6 +49,55 @@ function useCartCount() {
   return count;
 }
 
+function getProductImage(product) {
+  if (product?.imageUrl && String(product.imageUrl).trim()) {
+    return product.imageUrl;
+  }
+
+  const name = String(product?.productName || product?.name || "").toLowerCase();
+
+  const imageByProduct = [
+    {
+      keywords: ["laptop", "computer", "notebook", "pc"],
+      url: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["phone", "mobile", "iphone", "smartphone"],
+      url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["headphone", "headset", "earphone", "earbud", "airpod"],
+      url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["battery", "power bank", "charger"],
+      url: "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["watch", "smartwatch"],
+      url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["fruit", "apple", "banana", "orange", "mango"],
+      url: "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["vegetable", "vegetables", "tomato", "potato", "onion"],
+      url: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      keywords: ["medicine", "tablet", "capsule", "medical"],
+      url: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80"
+    }
+  ];
+
+  const match = imageByProduct.find(item =>
+    item.keywords.some(keyword => name.includes(keyword))
+  );
+
+  return match?.url ||
+    "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80";
+}
 function formatINR(amount) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -703,7 +752,7 @@ function CustomerDashboard() {
             vendorId: product.vendorId,
             price: Number(product.price || 0),
             stock: Number(product.stockQuantity ?? product.stock ?? 0),
-            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+            image: getProductImage(product)
           }));
         if (active) {
           setProducts(items);
@@ -1282,7 +1331,7 @@ function CustomerShop() {
             price: Number(product.price),
             stock: Number(product.stockQuantity ?? product.stock ?? 0),
             status: product.status || "ACTIVE",
-            image: product.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
+            image: getProductImage(product)
           }));
         if (active) setProducts(liveProducts);
       } catch (error) {

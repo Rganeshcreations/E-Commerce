@@ -10,6 +10,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findAllByTenantId(Long tenantId);
 
+    // Public marketplace catalog: only active products.
+    List<Product> findAllByStatusIgnoreCase(String status);
+
+    // Customer product details must only expose active products.
+    Optional<Product> findByIdAndStatusIgnoreCase(Long id, String status);
+
     List<Product> findAllByTenantIdAndVendorId(
             Long tenantId,
             Long vendorId

@@ -136,29 +136,29 @@ public class OrderService {
     }
 
     public List<Order> getAllOrders() {
+        Authentication authentication = currentAuthentication();
+        String role = currentRole();
+
+        if ("CUSTOMER".equals(role)) {
+            Long customerId = extractUserId(authentication);
+            return orderRepository.findAllByCustomerId(customerId);
+        }
+
+        if ("SUPER_ADMIN".equals(role)) {
+            return orderRepository.findAll();
+        }
 
         Long tenantId = requireTenant();
 
-        Authentication authentication = currentAuthentication();
-
-        String role = currentRole();
-
         if ("VENDOR".equals(role)) {
-
             VendorResponse vendor = currentVendor();
 
             if (!tenantId.equals(vendor.tenantId())) {
-                throw new RuntimeException(
-                        "Vendor does not belong to current tenant"
-                );
+                throw new RuntimeException("Vendor does not belong to current tenant");
             }
 
-            List<Order> orders =
-                    orderRepository
-                            .findAllByTenantIdAndVendorId(
-                                    tenantId,
-                                    vendor.id()
-                            );
+            List<Order> orders = orderRepository.findAllByTenantIdAndVendorId(
+                    tenantId, vendor.id());
 
             orders.forEach(order -> {
                 List<OrderItem> vendorItems = order.getItems().stream()
@@ -166,66 +166,45 @@ public class OrderService {
                         .toList();
                 order.setItems(vendorItems);
                 order.setTotalAmount(vendorItems.stream()
-                        .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                        .map(item -> item.getPrice().multiply(
+                                BigDecimal.valueOf(item.getQuantity())))
                         .reduce(BigDecimal.ZERO, BigDecimal::add));
             });
 
             return orders;
         }
 
-        if ("CUSTOMER".equals(role)) {
-            Long customerId = extractUserId(authentication);
-            return orderRepository.findAllByTenantIdAndCustomerId(tenantId, customerId);
-        }
-
-        if ("SUPER_ADMIN".equals(role)) {
-            return orderRepository.findAll();
-        }
-
         return orderRepository.findAllByTenantId(tenantId);
     }
 
     public Order getOrder(Long id) {
-
-        Long tenantId = requireTenant();
-
         Authentication authentication = currentAuthentication();
-
         String role = currentRole();
 
-        Order order = "SUPER_ADMIN".equals(role)
-                ? orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Order not found"))
-                : orderRepository.findByIdAndTenantId(id, tenantId)
-                        .orElseThrow(() -> new RuntimeException("Order not found"));
+        Order order;
+        if ("SUPER_ADMIN".equals(role) || "CUSTOMER".equals(role)) {
+            order = orderRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Order not found"));
+        } else {
+            order = orderRepository.findByIdAndTenantId(id, requireTenant())
+                    .orElseThrow(() -> new RuntimeException("Order not found"));
+        }
 
         if ("CUSTOMER".equals(role)) {
-
             Long customerId = extractUserId(authentication);
-
             if (!customerId.equals(order.getCustomerId())) {
-                throw new RuntimeException(
-                        "You can only view your own orders"
-                );
+                throw new RuntimeException("You can only view your own orders");
             }
         }
 
         if ("VENDOR".equals(role)) {
-
             VendorResponse vendor = currentVendor();
 
-            boolean containsVendor =
-                    order.getItems()
-                            .stream()
-                            .anyMatch(item ->
-                                    vendor.id().equals(
-                                            item.getVendorId()
-                                    )
-                            );
+            boolean containsVendor = order.getItems().stream()
+                    .anyMatch(item -> vendor.id().equals(item.getVendorId()));
 
             if (!containsVendor) {
-                throw new RuntimeException(
-                        "Order does not contain products from your store"
-                );
+                throw new RuntimeException("Order does not contain products from your store");
             }
 
             List<OrderItem> vendorItems = order.getItems().stream()
@@ -233,7 +212,8 @@ public class OrderService {
                     .toList();
             order.setItems(vendorItems);
             order.setTotalAmount(vendorItems.stream()
-                    .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+                    .map(item -> item.getPrice().multiply(
+                            BigDecimal.valueOf(item.getQuantity())))
                     .reduce(BigDecimal.ZERO, BigDecimal::add));
         }
 

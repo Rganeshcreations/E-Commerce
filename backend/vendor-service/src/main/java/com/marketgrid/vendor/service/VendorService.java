@@ -62,9 +62,16 @@ public class VendorService {
     }
 
     public List<Vendor> getAllVendors() {
-        if ("SUPER_ADMIN".equals(currentRole())) {
+        String role = currentRole();
+
+        if ("CUSTOMER".equals(role)) {
+            return vendorRepository.findAllByStatusIgnoreCase("ACTIVE");
+        }
+
+        if ("SUPER_ADMIN".equals(role)) {
             return vendorRepository.findAll();
         }
+
         return vendorRepository.findAllByTenantId(requireTenant());
     }
 

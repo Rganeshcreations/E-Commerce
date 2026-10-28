@@ -14,6 +14,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findAllByTenantIdAndCustomerId(Long tenantId, Long customerId);
 
+    // A customer can have orders in more than one tenant.
+    List<Order> findAllByCustomerId(Long customerId);
+
     Optional<Order> findByIdAndTenantId(Long id, Long tenantId);
 
     @Query("""

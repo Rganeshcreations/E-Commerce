@@ -59,14 +59,24 @@ public class ProductService {
 
     public List<Product> getAllProducts(String authorizationHeader) {
         String role = currentRole();
+
+        // Customers can browse active products across all tenants.
+        if ("CUSTOMER".equals(role)) {
+            return productRepository.findAllByStatusIgnoreCase("ACTIVE");
+        }
+
         if ("SUPER_ADMIN".equals(role)) {
             return productRepository.findAll();
         }
+
+        // Keep tenant isolation for tenant administrators and vendors.
         Long tenantId = requireTenant();
+
         if ("VENDOR".equals(role)) {
             VendorClient.VendorResponse vendor = currentVendor(authorizationHeader);
             return productRepository.findAllByTenantIdAndVendorId(tenantId, vendor.id());
         }
+
         return productRepository.findAllByTenantId(tenantId);
     }
 
@@ -143,10 +153,20 @@ public class ProductService {
     }
 
     private Product findProduct(Long id) {
-        if ("SUPER_ADMIN".equals(currentRole())) {
+        String role = currentRole();
+
+        if ("SUPER_ADMIN".equals(role)) {
             return productRepository.findById(id)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
         }
+
+        // Customers can view active products without a tenant ID.
+        if ("CUSTOMER".equals(role)) {
+            return productRepository.findByIdAndStatusIgnoreCase(id, "ACTIVE")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+        }
+
+        // Keep tenant-level restrictions for other roles.
         return productRepository.findByIdAndTenantId(id, requireTenant())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
     }
