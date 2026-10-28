@@ -32,6 +32,11 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/vendor-application")
+    public ResponseEntity<UserResponse> registerPendingVendor(@RequestBody RegisterRequest request) {
+        return ResponseEntity.status(201).body(new UserResponse(authService.registerPendingVendor(request)));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
             @RequestBody LoginRequest request) {
