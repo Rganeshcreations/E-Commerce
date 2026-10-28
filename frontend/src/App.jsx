@@ -6,6 +6,7 @@ import {
   Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
 } from "lucide-react";
 import "./index.css";
+import { api } from "./services/api";
 import VendorDashboard from "./pages/VendorDashboard";
 import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
@@ -409,10 +410,19 @@ function Register() {
     fullName: "",
     email: "",
     password: "",
-    tenantSlug: ""
+    confirmPassword: "",
+    tenantSlug: "",
+    businessName: ""
   });
+  const [tenants, setTenants] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.activeTenants()
+      .then(data => setTenants(Array.isArray(data) ? data : []))
+      .catch(error => setMessage(`Unable to load active stores: ${error.message}`));
+  }, []);
 
   function updateField(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -421,29 +431,40 @@ function Register() {
   async function submit(e) {
     e.preventDefault();
     setMessage("");
+    if (form.password !== form.confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+    if (role === "VENDOR" && !form.tenantSlug) {
+      setMessage("Please select the store you want to join.");
+      return;
+    }
     setLoading(true);
 
     try {
+      if (role === "VENDOR") {
+        await api.submitVendorApplication({
+          tenantSlug: form.tenantSlug.trim(),
+          applicantName: form.fullName.trim(),
+          email: form.email.trim(),
+          businessName: form.businessName.trim(),
+          password: form.password
+        });
+        setMessage("Application submitted successfully. The selected store administrator must approve it before vendor access is granted.");
+        return;
+      }
+
       const response = await fetch(`${API}/api/auth/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, role: "CUSTOMER", tenantSlug: form.tenantSlug.trim() })
       });
-
       const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
         throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
       }
-
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
-
+      setMessage("Registration successful. You can now sign in.");
       setTimeout(() => navigate("/login"), 1200);
-
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -508,15 +529,32 @@ function Register() {
               required
             />
           </label>
+          {role === "VENDOR" && (
+            <label>
+              Business Name
+              <input
+                name="businessName"
+                value={form.businessName}
+                onChange={updateField}
+                placeholder="Enter business/store name"
+                required
+              />
+            </label>
+          )}
+
           <label>
-            Store Slug
-            <input
+            Store you want to join
+            <select
               name="tenantSlug"
               value={form.tenantSlug}
               onChange={updateField}
-              placeholder="e.g. marketgrid-test-20261024"
               required
-            />
+            >
+              <option value="">Select an active store</option>
+              {tenants.map(tenant => (
+                <option key={tenant.id} value={tenant.slug}>{tenant.name}</option>
+              ))}
+            </select>
           </label>
           <label>
             Password
@@ -525,9 +563,23 @@ function Register() {
               name="password"
               value={form.password}
               onChange={updateField}
-              placeholder="Create a password"
+              placeholder="At least 8 characters"
               required
-              minLength="6"
+              minLength="8"
+              autoComplete="new-password"
+            />
+          </label>
+          <label>
+            Confirm Password
+            <input
+              type="password"
+              name="confirmPassword"
+              value={form.confirmPassword}
+              onChange={updateField}
+              placeholder="Re-enter your password"
+              required
+              minLength="8"
+              autoComplete="new-password"
             />
           </label>
 
