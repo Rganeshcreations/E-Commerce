@@ -50,3 +50,20 @@
 .domain-footnote{color:#8290a5;font-size:11px;margin:14px 2px 0}
 @media(max-width:1050px){.domain-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.domains-page{padding:24px 20px}}
 @media(max-width:620px){.domains-page{padding:20px 13px}.domains-heading h1{font-size:29px}.domain-stats{grid-template-columns:1fr 1fr;gap:10px}.domain-stats article{padding:14px}.domain-form-fields{grid-template-columns:1fr}.domain-panel-heading{align-items:stretch}.domain-search{width:auto}}
+
+.domain-tabs{display:flex;align-items:center;gap:7px;padding:12px 22px;border-bottom:1px solid #edf0f5;background:#fff;flex-wrap:wrap}
+.domain-tabs button{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:9px;padding:9px 12px;background:transparent;color:#687791;font-size:12px;font-weight:750;cursor:pointer}
+.domain-tabs button span{display:inline-grid;place-items:center;min-width:22px;height:21px;padding:0 5px;box-sizing:border-box;border-radius:20px;background:#eef2f8;color:#56647c;font-size:10px}
+.domain-tabs button.active{background:#edf4ff;border-color:#d9e6ff;color:#245bd1}
+.domain-tabs button.active span{background:#dce8ff;color:#245bd1}
+.domain-tenant strong{display:flex;align-items:center;gap:6px}
+.domain-unassigned-note{color:#9a6b1a;font-size:12px}
+.domain-modal-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.48);backdrop-filter:blur(3px)}
+.domain-assign-modal{width:min(100%,510px);box-sizing:border-box;background:white;border:1px solid #e0e6f0;border-radius:18px;padding:24px;box-shadow:0 24px 80px rgba(15,23,42,.25)}
+.domain-assign-modal .domain-form-title{margin-bottom:22px}
+.domain-assign-modal .domain-form-title h2{font-size:23px;margin:0 0 7px}
+.domain-assign-label{display:block;font-size:12px;font-weight:800;color:#42516a}
+.domain-assign-label select{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:13px 12px;border:1px solid #dce3ec;border-radius:9px;background:#fff;color:#26354e;font:inherit;font-size:13px}
+.domain-modal-help{font-size:12px;line-height:1.5;color:#9a6b1a;background:#fff7e8;padding:10px 12px;border-radius:8px;margin:12px 0 0}
+.domain-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+@media(max-width:620px){.domain-tabs{padding:10px 12px}.domain-tabs button{padding:8px}.domain-assign-modal{padding:18px}.domain-modal-actions .domain-btn{flex:1}}
