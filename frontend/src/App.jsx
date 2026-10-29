@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, O
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck, Layers,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2, RefreshCw, Building2
 } from "lucide-react";
 import "./index.css";
 import VendorDashboard from "./pages/VendorDashboard";
@@ -430,7 +430,7 @@ function Register() {
       setStoresLoading(true);
       setStoresError("");
       try {
-        const response = await fetch(`${API}/api/tenants`);
+        const response = await fetch(`${API}/api/tenants/active`);
         const data = await response.json().catch(() => []);
         if (!response.ok) throw new Error(data.message || data.error || `Could not load stores (HTTP ${response.status})`);
         const items = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
