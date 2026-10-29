@@ -1,791 +1,371 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Package, Plus, Search, Edit3, Trash2, RefreshCw,
-  X, Boxes, IndianRupee, CheckCircle2
+  Package, Boxes, RefreshCw, ShoppingBag, IndianRupee,
+  Plus, Store, AlertCircle, CheckCircle2
 } from "lucide-react";
 import { api } from "../services/api";
 
-const imageMap = {
-  "gaming laptop": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=900&q=80",
-  "iphone": "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?auto=format&fit=crop&w=900&q=80",
-  "iphoneflip": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=80",
-  "mechanical keyboard": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=900&q=80",
-  "wireless mouse": "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=900&q=80",
-  "smart watch": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
-  "wireless headphones": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
-  "digital camera": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
-  "bluetooth speaker": "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80"
-};
-
-const fallbackImage =
-  "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?auto=format&fit=crop&w=900&q=80";
-
-function getImage(name) {
-  return imageMap[String(name || "").toLowerCase()] || fallbackImage;
-}
+const money = value => Number(value || 0).toLocaleString("en-IN", {
+  maximumFractionDigits: 2
+});
 
 export default function VendorProducts() {
   const [products, setProducts] = useState([]);
-  const [query, setQuery] = useState("");
+  const [catalog, setCatalog] = useState([]);
+  const [forms, setForms] = useState({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [allocatingId, setAllocatingId] = useState(null);
   const [error, setError] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-
-  const [form, setForm] = useState({
-    productName: "",
-    description: "",
-    price: "",
-    stockQuantity: ""
-  });
+  const [catalogError, setCatalogError] = useState("");
+  const [message, setMessage] = useState("");
 
   const load = async () => {
+    setLoading(true);
+    setError("");
+    setCatalogError("");
     try {
-      setLoading(true);
-      setError("");
-
       const vendor = await api.myVendor();
-      const data = await api.productsByVendor(vendor.id);
-      setProducts(Array.isArray(data) ? data : []);
+      const [productResult, catalogResult] = await Promise.allSettled([
+        api.productsByVendor(vendor.id),
+        api.tenantCatalog()
+      ]);
+
+      if (productResult.status === "fulfilled") {
+        setProducts(Array.isArray(productResult.value) ? productResult.value : []);
+      } else {
+        setError(productResult.reason?.message || "Unable to load your products.");
+      }
+
+      if (catalogResult.status === "fulfilled") {
+        const rows = Array.isArray(catalogResult.value) ? catalogResult.value : [];
+        setCatalog(rows.filter(item =>
+          String(item.status || "").toUpperCase() === "ACTIVE" &&
+          Number(item.availableQuantity || 0) > 0
+        ));
+      } else {
+        setCatalog([]);
+        setCatalogError(
+          catalogResult.reason?.message ||
+          "Unable to load the tenant catalog. Please refresh and try again."
+        );
+      }
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Unable to verify your vendor profile.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
-
-    if (!q) return products;
-
-    return products.filter(p =>
-      `${p.productName || ""} ${p.description || ""}`
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [products, query]);
-
-  const totalStock = products.reduce(
-    (sum, p) => sum + Number(p.stockQuantity || 0),
-    0
+  const totalStock = useMemo(
+    () => products.reduce((sum, product) => sum + Number(product.stockQuantity || 0), 0),
+    [products]
   );
 
-  const lowStock = products.filter(
-    p => Number(p.stockQuantity || 0) <= 5
-  ).length;
-
-  function openAdd() {
-    setEditing(null);
-    setForm({
-      productName: "",
-      description: "",
-      price: "",
-      stockQuantity: ""
-    });
-    setShowModal(true);
-  }
-
-  function openEdit(product) {
-    setEditing(product);
-
-    setForm({
-      productName: product.productName || "",
-      description: product.description || "",
-      price: product.price || "",
-      stockQuantity: product.stockQuantity || ""
-    });
-
-    setShowModal(true);
-  }
-
-  async function saveProduct(event) {
-    event.preventDefault();
-    setError("");
-
-    const price = Number(form.price);
-    const stockQuantity = Number(form.stockQuantity);
-    if (!form.productName.trim()) {
-      setError("Product name is required.");
-      return;
-    }
-    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(stockQuantity) || stockQuantity < 0) {
-      setError("Enter a valid non-negative price and whole-number stock quantity.");
-      return;
-    }
-
-    const body = {
-      productName: form.productName.trim(),
-      description: form.description.trim(),
-      price,
-      stockQuantity,
-      status: editing?.status || "ACTIVE"
-    };
-
-    try {
-      setSaving(true);
-      if (editing) {
-        await api.updateProduct(editing.id, body);
-      } else {
-        const vendor = await api.myVendor();
-        await api.createProduct({ ...body, vendorId: vendor.id });
+  const updateForm = (id, field, value) => {
+    setForms(current => ({
+      ...current,
+      [id]: {
+        quantity: current[id]?.quantity ?? "1",
+        sellingPrice: current[id]?.sellingPrice ?? "",
+        ...current[id],
+        [field]: value
       }
-      setShowModal(false);
-      await load();
-    } catch (error) {
-      setError(error.message || "Unable to save product.");
-    } finally {
-      setSaving(false);
+    }));
+  };
+
+  const allocate = async item => {
+    const form = forms[item.id] || {};
+    const quantity = Number(form.quantity ?? 1);
+    const sellingPrice = Number(
+      form.sellingPrice === undefined || form.sellingPrice === ""
+        ? item.wholesalePrice
+        : form.sellingPrice
+    );
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setError("Allocation quantity must be a whole number greater than zero.");
+      return;
     }
-  }
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+      setError("Enter a valid non-negative selling price.");
+      return;
+    }
+    if (quantity > Number(item.availableQuantity)) {
+      setError(`Only ${item.availableQuantity} units of ${item.productName} are available.`);
+      return;
+    }
 
-  async function deleteProduct(id) {
-    const confirmed = window.confirm("Are you sure you want to remove this product?");
-    if (!confirmed) return;
-
+    setError("");
+    setMessage("");
+    setAllocatingId(item.id);
     try {
-      setError("");
-      await api.deleteProduct(id);
+      await api.allocateCatalogProduct(item.id, { quantity, sellingPrice });
+      setMessage(`${item.productName} was added to your products with ${quantity} unit(s).`);
+      setForms(current => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
       await load();
-    } catch (error) {
-      setError(error.message || "Unable to delete product.");
+    } catch (e) {
+      setError(e.message || "Unable to allocate this catalog product.");
+    } finally {
+      setAllocatingId(null);
     }
-  }
+  };
 
   return (
-    <div
-      style={{
-        minHeight: "100%",
-        background: "#f5f7fb",
-        padding: "36px 42px"
-      }}
-    >
-
-      {/* HEADER */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: "20px",
-          flexWrap: "wrap",
-          marginBottom: "28px"
-        }}
-      >
+    <div style={{ minHeight: "100%", background: "#f5f7fb", padding: "36px 42px" }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+        gap: 20, flexWrap: "wrap", marginBottom: 26
+      }}>
         <div>
-          <div
-            style={{
-              color: "#2864e6",
-              fontSize: "12px",
-              fontWeight: "800",
-              letterSpacing: "2.5px",
-              marginBottom: "8px"
-            }}
-          >
-            VENDOR WORKSPACE
-          </div>
-
-          <h1
-            style={{
-              margin: "0 0 8px",
-              color: "#17233c",
-              fontSize: "36px",
-              fontWeight: "800"
-            }}
-          >
+          <div style={{
+            color: "#2864e6", fontSize: 12, fontWeight: 800,
+            letterSpacing: "2.5px", marginBottom: 8
+          }}>VENDOR WORKSPACE</div>
+          <h1 style={{ margin: "0 0 8px", color: "#17233c", fontSize: 36, fontWeight: 800 }}>
             My Products
           </h1>
-
-          <p
-            style={{
-              margin: 0,
-              color: "#75839a",
-              fontSize: "15px"
-            }}
-          >
-            Manage products listed in your store.
+          <p style={{ margin: 0, color: "#75839a", fontSize: 15 }}>
+            Choose stock from your tenant catalog and set your selling price.
           </p>
         </div>
-
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            onClick={load}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              border: "1px solid #dce3ee",
-              background: "#fff",
-              borderRadius: "10px",
-              padding: "11px 16px",
-              fontWeight: "700",
-              cursor: "pointer"
-            }}
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-
-          <button
-            onClick={openAdd}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              border: "none",
-              background: "#2864e6",
-              color: "#fff",
-              borderRadius: "10px",
-              padding: "11px 18px",
-              fontWeight: "700",
-              cursor: "pointer"
-            }}
-          >
-            <Plus size={17} />
-            Add Product
-          </button>
-        </div>
+        <button onClick={load} disabled={loading} style={secondaryButton}>
+          <RefreshCw size={16} /> {loading ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
 
-      {/* SUMMARY */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-          gap: "18px",
-          marginBottom: "24px"
-        }}
-      >
-        <Summary
-          icon={<Package size={21} />}
-          title="My Products"
-          value={products.length}
-          note="Products listed"
-        />
+      {error && <Notice type="error">{error}</Notice>}
+      {message && <Notice type="success">{message}</Notice>}
 
-        <Summary
-          icon={<Boxes size={21} />}
-          title="Total Stock"
-          value={totalStock}
-          note="Units available"
-        />
-
-        <Summary
-          icon={<IndianRupee size={21} />}
-          title="Low Stock"
-          value={lowStock}
-          note="Products need attention"
-        />
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 16, marginBottom: 28
+      }}>
+        <Summary icon={<Package size={21} />} title="My Products" value={products.length} note="Products listed in your store" />
+        <Summary icon={<Boxes size={21} />} title="Total Stock" value={totalStock} note="Units allocated to you" />
+        <Summary icon={<Store size={21} />} title="Available Catalog Items" value={catalog.length} note="Items with stock available" />
       </div>
 
-      {/* SEARCH */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #e2e7ef",
-          borderRadius: "14px",
-          padding: "13px 16px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          marginBottom: "22px"
-        }}
-      >
-        <Search size={19} color="#8995a8" />
-
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search your products..."
-          style={{
-            width: "100%",
-            border: "none",
-            outline: "none",
-            fontSize: "14px",
-            color: "#202d45"
-          }}
-        />
-      </div>
-
-      {error && (
-        <div
-          style={{
-            background: "#fff0f0",
-            border: "1px solid #ffd0d0",
-            color: "#c43d3d",
-            borderRadius: "12px",
-            padding: "13px 16px",
-            marginBottom: "20px"
-          }}
-        >
-          {error}
+      <section id="tenant-catalog" style={panel}>
+        <div style={sectionHeader}>
+          <div>
+            <h2 style={sectionTitle}><Store size={20} /> Available from Your Tenant</h2>
+            <p style={sectionSubtitle}>
+              Allocate available tenant stock to your store. Allocation reduces the tenant's available quantity.
+            </p>
+          </div>
+          <span style={countPill}>{catalog.length} available</span>
         </div>
-      )}
 
-      {/* PRODUCTS */}
-      {loading ? (
-        <div
-          style={{
-            background: "#fff",
-            padding: "45px",
-            borderRadius: "16px",
-            textAlign: "center",
-            color: "#75839a"
-          }}
-        >
-          Loading your products...
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-            gap: "20px"
-          }}
-        >
-          {filtered.map(product => {
-            const stock = Number(product.stockQuantity || 0);
+        {catalogError && <Notice type="error">{catalogError}</Notice>}
 
-            return (
-              <article
-                key={product.id}
-                style={{
-                  background: "#fff",
-                  border: "1px solid #e2e7ef",
-                  borderRadius: "16px",
-                  overflow: "hidden",
-                  boxShadow: "0 4px 15px rgba(30,45,75,.045)"
-                }}
-              >
+        {loading ? (
+          <div style={emptyStyle}>Loading tenant catalog...</div>
+        ) : catalog.length === 0 && !catalogError ? (
+          <div style={emptyStyle}>
+            <Boxes size={36} color="#2864e6" />
+            <h3 style={{ margin: "12px 0 6px", color: "#202d45" }}>No stock available</h3>
+            <p style={{ margin: 0 }}>Your tenant administrator must add stock to the tenant catalog first.</p>
+          </div>
+        ) : (
+          <div style={gridStyle}>
+            {catalog.map(item => {
+              const form = forms[item.id] || {};
+              const quantity = form.quantity ?? "1";
+              const sellingPrice = form.sellingPrice ?? String(item.wholesalePrice ?? "");
+              return (
+                <article key={item.id} style={cardStyle}>
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+                    gap: 12, marginBottom: 12
+                  }}>
+                    <div style={{
+                      width: 44, height: 44, flexShrink: 0, borderRadius: 12,
+                      background: "#edf4ff", color: "#2864e6",
+                      display: "grid", placeItems: "center"
+                    }}><Package size={22} /></div>
+                    <span style={stockPill}>{item.availableQuantity} units available</span>
+                  </div>
+                  <h3 style={{ margin: "0 0 7px", color: "#202d45", fontSize: 18 }}>
+                    {item.productName}
+                  </h3>
+                  <p style={{ margin: "0 0 14px", minHeight: 38, color: "#75839a", fontSize: 13 }}>
+                    {item.description || "Product supplied by your tenant."}
+                  </p>
+                  <div style={{ marginBottom: 16, color: "#75839a", fontSize: 13 }}>
+                    Tenant wholesale price: <strong style={{ color: "#202d45" }}>₹{money(item.wholesalePrice)}</strong>
+                  </div>
 
-                <div
-                  style={{
-                    height: "190px",
-                    background: "#eef2f7",
-                    overflow: "hidden",
-                    position: "relative"
-                  }}
-                >
-                  <img
-                    src={getImage(product.productName)}
-                    alt={product.productName}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover"
-                    }}
+                  <label style={fieldLabel} htmlFor={`quantity-${item.id}`}>Quantity to allocate</label>
+                  <input
+                    id={`quantity-${item.id}`}
+                    type="number" min="1" max={item.availableQuantity} step="1"
+                    value={quantity}
+                    onChange={event => updateForm(item.id, "quantity", event.target.value)}
+                    style={fieldStyle}
                   />
-
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: "12px",
-                      right: "12px",
-                      background: stock > 0 ? "#e9f8ef" : "#ffecec",
-                      color: stock > 0 ? "#168344" : "#c43d3d",
-                      padding: "6px 10px",
-                      borderRadius: "20px",
-                      fontSize: "11px",
-                      fontWeight: "800"
-                    }}
+                  <label style={fieldLabel} htmlFor={`price-${item.id}`}>Your selling price (₹)</label>
+                  <input
+                    id={`price-${item.id}`}
+                    type="number" min="0" step="0.01"
+                    value={sellingPrice}
+                    onChange={event => updateForm(item.id, "sellingPrice", event.target.value)}
+                    style={fieldStyle}
+                  />
+                  <button
+                    onClick={() => allocate(item)}
+                    disabled={allocatingId !== null || Number(item.availableQuantity) < 1}
+                    style={{ ...primaryButton, width: "100%", marginTop: 8 }}
                   >
-                    {stock > 0 ? "ACTIVE" : "OUT OF STOCK"}
+                    <Plus size={16} />
+                    {allocatingId === item.id ? "Allocating..." : "Add to My Products"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section style={{ ...panel, marginTop: 24 }}>
+        <div style={sectionHeader}>
+          <div>
+            <h2 style={sectionTitle}><ShoppingBag size={20} /> My Store Products</h2>
+            <p style={sectionSubtitle}>These are the products allocated to your vendor account.</p>
+          </div>
+          <span style={countPill}>{products.length} listed</span>
+        </div>
+
+        {loading ? (
+          <div style={emptyStyle}>Loading your products...</div>
+        ) : products.length === 0 ? (
+          <div style={emptyStyle}>
+            <Package size={36} color="#2864e6" />
+            <h3 style={{ margin: "12px 0 6px", color: "#202d45" }}>No products listed yet</h3>
+            <p style={{ margin: 0 }}>Choose a product above when your tenant has stock available.</p>
+          </div>
+        ) : (
+          <div style={gridStyle}>
+            {products.map(product => (
+              <article key={product.id} style={cardStyle}>
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  gap: 12, marginBottom: 14
+                }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 12, background: "#edf4ff",
+                    color: "#2864e6", display: "grid", placeItems: "center"
+                  }}><Package size={22} /></div>
+                  <span style={Number(product.stockQuantity || 0) > 0 ? stockPill : emptyStockPill}>
+                    {product.stockQuantity} units
                   </span>
                 </div>
-
-                <div style={{ padding: "18px" }}>
-
-                  <div
-                    style={{
-                      color: "#8995a8",
-                      fontSize: "11px",
-                      fontWeight: "700",
-                      marginBottom: "6px"
-                    }}
-                  >
-                    PRODUCT #{product.id}
-                  </div>
-
-                  <h3
-                    style={{
-                      margin: "0 0 7px",
-                      color: "#202d45",
-                      fontSize: "18px"
-                    }}
-                  >
-                    {product.productName}
-                  </h3>
-
-                  <p
-                    style={{
-                      color: "#8995a8",
-                      fontSize: "13px",
-                      minHeight: "38px",
-                      margin: "0 0 14px"
-                    }}
-                  >
-                    {product.description ||
-                      "Quality product available from your store."}
-                  </p>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "13px"
-                    }}
-                  >
-                    <strong
-                      style={{
-                        color: "#17233c",
-                        fontSize: "21px"
-                      }}
-                    >
-                      ₹{Number(product.price || 0).toLocaleString("en-IN")}
-                    </strong>
-
-                    <span
-                      style={{
-                        color: stock <= 5 ? "#d34b4b" : "#168344",
-                        fontSize: "12px",
-                        fontWeight: "800"
-                      }}
-                    >
-                      {stock} units
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      height: "6px",
-                      background: "#e9edf3",
-                      borderRadius: "10px",
-                      overflow: "hidden",
-                      marginBottom: "16px"
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${Math.min(stock * 10, 100)}%`,
-                        height: "100%",
-                        background: stock <= 5 ? "#e26b25" : "#2864e6",
-                        borderRadius: "10px"
-                      }}
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "9px"
-                    }}
-                  >
-                    <button
-                      onClick={() => openEdit(product)}
-                      style={{
-                        border: "1px solid #dce3ee",
-                        background: "#fff",
-                        color: "#2864e6",
-                        borderRadius: "9px",
-                        padding: "10px",
-                        fontWeight: "700",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        gap: "6px"
-                      }}
-                    >
-                      <Edit3 size={15} />
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() => deleteProduct(product.id)}
-                      style={{
-                        border: "1px solid #ffd2d2",
-                        background: "#fff6f6",
-                        color: "#c43d3d",
-                        borderRadius: "9px",
-                        padding: "10px",
-                        fontWeight: "700",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        gap: "6px"
-                      }}
-                    >
-                      <Trash2 size={15} />
-                      Delete
-                    </button>
-                  </div>
-
+                <h3 style={{ margin: "0 0 8px", color: "#202d45", fontSize: 18 }}>
+                  {product.productName}
+                </h3>
+                <p style={{ margin: "0 0 14px", color: "#75839a", fontSize: 13, minHeight: 36 }}>
+                  {product.description || "Your store listing"}
+                </p>
+                <div style={{ color: "#17233c", fontSize: 21, fontWeight: 800 }}>
+                  ₹{money(product.price)}
                 </div>
               </article>
-            );
-          })}
-        </div>
-      )}
-
-      {!loading && !filtered.length && (
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e2e7ef",
-            borderRadius: "16px",
-            padding: "55px",
-            textAlign: "center",
-            color: "#8995a8"
-          }}
-        >
-          <Package size={42} />
-          <h3 style={{ color: "#202d45" }}>No products found</h3>
-          <p>Try another search or add a new product.</p>
-        </div>
-      )}
-
-      {/* MODAL */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: "20px"
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "520px",
-              background: "#fff",
-              borderRadius: "18px",
-              padding: "26px",
-              boxShadow: "0 20px 60px rgba(0,0,0,.18)"
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "22px"
-              }}
-            >
-              <div>
-                <h2 style={{ margin: 0, color: "#202d45" }}>
-                  {editing ? "Edit Product" : "Add Product"}
-                </h2>
-                <p
-                  style={{
-                    margin: "5px 0 0",
-                    color: "#8995a8",
-                    fontSize: "13px"
-                  }}
-                >
-                  {editing
-                    ? "Update your product information."
-                    : "Add a product to your store."}
-                </p>
-              </div>
-
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  border: "none",
-                  background: "#f1f4f8",
-                  borderRadius: "9px",
-                  width: "36px",
-                  height: "36px",
-                  cursor: "pointer"
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={saveProduct}>
-
-              <Field
-                label="Product Name"
-                value={form.productName}
-                onChange={v =>
-                  setForm({ ...form, productName: v })
-                }
-                placeholder="Example: Gaming Laptop"
-              />
-
-              <Field
-                label="Description"
-                value={form.description}
-                onChange={v =>
-                  setForm({ ...form, description: v })
-                }
-                placeholder="Describe your product"
-              />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "14px"
-                }}
-              >
-                <Field
-                  label="Price"
-                  type="number"
-                  value={form.price}
-                  onChange={v =>
-                    setForm({ ...form, price: v })
-                  }
-                  placeholder="65000"
-                />
-
-                <Field
-                  label="Stock"
-                  type="number"
-                  value={form.stockQuantity}
-                  onChange={v =>
-                    setForm({ ...form, stockQuantity: v })
-                  }
-                  placeholder="10"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  border: "none",
-                  background: "#2864e6",
-                  color: "#fff",
-                  borderRadius: "10px",
-                  padding: "13px",
-                  fontWeight: "800",
-                  cursor: "pointer",
-                  marginTop: "8px",
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                <CheckCircle2 size={17} />
-                {saving ? "Saving..." : editing ? "Save Changes" : "Create Product"}
-              </button>
-
-            </form>
+            ))}
           </div>
-        </div>
-      )}
-
+        )}
+      </section>
     </div>
-  );
-}
-
-function Field({ label, value, onChange, placeholder, type = "text" }) {
-  return (
-    <label
-      style={{
-        display: "block",
-        marginBottom: "15px",
-        color: "#39465d",
-        fontSize: "13px",
-        fontWeight: "700"
-      }}
-    >
-      {label}
-
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        required
-        style={{
-          width: "100%",
-          boxSizing: "border-box",
-          marginTop: "7px",
-          border: "1px solid #dce3ee",
-          borderRadius: "9px",
-          padding: "11px 12px",
-          outline: "none",
-          fontSize: "14px"
-        }}
-      />
-    </label>
   );
 }
 
 function Summary({ icon, title, value, note }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e7ef",
-        borderRadius: "15px",
-        padding: "19px",
-        boxShadow: "0 3px 12px rgba(30,45,75,.045)"
-      }}
-    >
-      <div
-        style={{
-          width: "42px",
-          height: "42px",
-          borderRadius: "11px",
-          background: "#edf4ff",
-          color: "#2864e6",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: "13px"
-        }}
-      >
-        {icon}
-      </div>
-
-      <div
-        style={{
-          color: "#7d899d",
-          fontSize: "12px",
-          fontWeight: "700"
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          color: "#17233c",
-          fontSize: "25px",
-          fontWeight: "800",
-          margin: "5px 0"
-        }}
-      >
-        {value}
-      </div>
-
-      <div
-        style={{
-          color: "#9aa5b6",
-          fontSize: "11px"
-        }}
-      >
-        {note}
-      </div>
+    <div style={{
+      background: "#fff", border: "1px solid #e2e7ef", borderRadius: 15,
+      padding: 19, boxShadow: "0 3px 12px rgba(30,45,75,.045)"
+    }}>
+      <div style={{
+        width: 42, height: 42, borderRadius: 11, background: "#edf4ff",
+        color: "#2864e6", display: "grid", placeItems: "center", marginBottom: 14
+      }}>{icon}</div>
+      <div style={{ color: "#7d899d", fontSize: 12, fontWeight: 700 }}>{title}</div>
+      <div style={{ color: "#17233c", fontSize: 25, fontWeight: 800, margin: "5px 0" }}>{value}</div>
+      <div style={{ color: "#9aa5b6", fontSize: 11 }}>{note}</div>
     </div>
   );
 }
+
+function Notice({ type, children }) {
+  const success = type === "success";
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 9,
+      background: success ? "#ecfdf3" : "#fff0f0",
+      border: `1px solid ${success ? "#bbf7d0" : "#ffd0d0"}`,
+      color: success ? "#166534" : "#c43d3d",
+      borderRadius: 12, padding: "12px 15px", marginBottom: 18
+    }}>
+      {success ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+      <span>{children}</span>
+    </div>
+  );
+}
+
+const panel = {
+  background: "#fff", border: "1px solid #e2e7ef", borderRadius: 16,
+  padding: 22, boxShadow: "0 3px 12px rgba(30,45,75,.04)"
+};
+const sectionHeader = {
+  display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+  gap: 15, flexWrap: "wrap", marginBottom: 20
+};
+const sectionTitle = {
+  display: "flex", alignItems: "center", gap: 9, margin: 0,
+  color: "#202d45", fontSize: 19, fontWeight: 800
+};
+const sectionSubtitle = { margin: "6px 0 0", color: "#8995a8", fontSize: 13 };
+const countPill = {
+  background: "#edf4ff", color: "#2864e6", borderRadius: 20,
+  padding: "7px 11px", fontSize: 12, fontWeight: 800
+};
+const gridStyle = {
+  display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 18
+};
+const cardStyle = {
+  border: "1px solid #e2e7ef", borderRadius: 14, padding: 18,
+  background: "#fff", boxShadow: "0 3px 12px rgba(30,45,75,.035)"
+};
+const fieldLabel = {
+  display: "block", margin: "0 0 6px", color: "#53627a", fontSize: 12, fontWeight: 700
+};
+const fieldStyle = {
+  width: "100%", boxSizing: "border-box", marginBottom: 13, padding: "11px 12px",
+  border: "1px solid #dce3ee", borderRadius: 9, fontSize: 14, color: "#202d45"
+};
+const primaryButton = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+  border: "none", background: "#2864e6", color: "#fff", borderRadius: 10,
+  padding: "11px 15px", fontWeight: 800, cursor: "pointer"
+};
+const secondaryButton = {
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+  border: "1px solid #dce3ee", background: "#fff", color: "#202d45",
+  borderRadius: 10, padding: "11px 16px", fontWeight: 700, cursor: "pointer"
+};
+const stockPill = {
+  background: "#e9f8ef", color: "#168344", borderRadius: 20,
+  padding: "6px 9px", fontSize: 11, fontWeight: 800
+};
+const emptyStockPill = {
+  background: "#ffecec", color: "#c43d3d", borderRadius: 20,
+  padding: "6px 9px", fontSize: 11, fontWeight: 800
+};
+const emptyStyle = {
+  display: "grid", justifyItems: "center", padding: "38px 18px",
+  textAlign: "center", color: "#8995a8"
+};
