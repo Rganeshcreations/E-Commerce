@@ -33,7 +33,7 @@ public class PaymentService {
             String role,
             String authorizationHeader) {
 
-        if (tenantId == null || authenticatedUserId == null) {
+        if (authenticatedUserId == null) {
             throw new IllegalArgumentException("Authentication or tenant information is missing");
         }
         if (!"CUSTOMER".equals(role)) {
@@ -63,7 +63,7 @@ public class PaymentService {
         if (order == null || order.id() == null) {
             throw new IllegalArgumentException("Order not found");
         }
-        if (!tenantId.equals(order.tenantId())) {
+        if (tenantId != null && !tenantId.equals(order.tenantId())) {
             throw new IllegalArgumentException("Order belongs to a different tenant");
         }
         if (!authenticatedUserId.equals(order.customerId())) {

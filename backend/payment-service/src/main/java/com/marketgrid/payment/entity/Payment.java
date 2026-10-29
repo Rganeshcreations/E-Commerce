@@ -18,7 +18,7 @@ public class Payment {
     @Column(nullable = false)
     private Long customerId;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Long tenantId;
 
     @Column(nullable = false, precision = 12, scale = 2)

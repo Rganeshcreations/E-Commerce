@@ -1333,7 +1333,12 @@ function CustomerShop() {
             status: product.status || "ACTIVE",
             image: getProductImage(product)
           }));
-        if (active) setProducts(liveProducts);
+        const selectedVendorId = new URLSearchParams(window.location.search).get("vendorId");
+        const visibleProducts = selectedVendorId
+          ? liveProducts.filter(product => String(product.vendorId) === String(selectedVendorId))
+          : liveProducts;
+
+        if (active) setProducts(visibleProducts);
       } catch (error) {
         if (active) setProductsError(error.message || "Could not load products from the marketplace.");
       } finally {
@@ -2323,7 +2328,21 @@ function Vendors() {
       {!loading&&!error&&vendors.length===0&&<div className="empty-card"><Store size={38}/><h2>No vendors available</h2><p>This store does not currently have active vendor profiles.</p></div>}
       <div className="vendor-grid">
         {!loading&&vendors.map(v=>(
-          <div className="vendor-card" key={v.id}>
+                    <div
+            className="vendor-card"
+            key={v.id}
+            role="button"
+            tabIndex={0}
+            title={"Browse products from " + v.name}
+            style={{ cursor: "pointer" }}
+            onClick={() => window.location.href = "/shop/products?vendorId=" + encodeURIComponent(v.id)}
+            onKeyDown={event => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                window.location.href = "/shop/products?vendorId=" + encodeURIComponent(v.id);
+              }
+            }}
+          >
             <div className="vendor-avatar">{String(v.name||"V").charAt(0).toUpperCase()}</div>
             <div><h3>{v.name}</h3><p>{v.email||"Contact details unavailable"}</p></div>
             <span className={"badge "+(String(v.status||"").toUpperCase()==="ACTIVE"?"green":"orange")}>{v.status||"UNKNOWN"}</span>
