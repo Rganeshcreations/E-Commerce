@@ -1407,3 +1407,32 @@
   .register-card h1 { font-size: 26px; }
   .register-role-switch button { min-height: 66px; font-size: 11px; }
 }
+
+/* Login uses the same clean card and role selector as registration. */
+.login-card .register-role-switch {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 25px;
+}
+.login-card .register-role-switch button {
+  min-height: 72px;
+}
+.login-card .auth-form {
+  gap: 18px;
+}
+.login-card .auth-form label {
+  font-size: 12px;
+}
+.login-card .auth-footer {
+  margin-top: 22px;
+}
+@media (max-width: 440px) {
+  .login-card .register-role-switch button {
+    min-height: 64px;
+    gap: 5px;
+    font-size: 10px;
+  }
+  .login-card .register-role-switch button svg {
+    width: 18px;
+    height: 18px;
+  }
+}
