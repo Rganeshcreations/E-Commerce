@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Search, ShoppingCart, Package, RefreshCw } from "lucide-react";
 import { api } from "../services/api";
 import { useApp } from "../context/AppContext";
+import { getProductImage } from "../utils/productImages";
 
 export default function Products() {
   const [products,setProducts] = useState([]);
@@ -44,7 +45,7 @@ export default function Products() {
         <div className="product-grid">
           {filtered.map(p => (
             <article className="product-card" key={p.id}>
-              <div className="product-image"><Package size={48}/></div>
+              <div className="product-image" style={{ padding: 0, overflow: "hidden", background: "#f1f5f9" }}><img src={p.imageUrl || p.imageURL || ""} alt={p.productName || "Product"} onError={e => { e.currentTarget.onerror = null; e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><Package size={48}/></div>
               <div className="product-body">
                 <div className="status-pill success">{p.status || "AVAILABLE"}</div>
                 <h3>{p.productName}</h3>
@@ -73,3 +74,4 @@ export default function Products() {
     </div>
   );
 }
+

@@ -1,0 +1,78 @@
+﻿/* MarketGrid order-tracking timeline */
+.mg-tracking-timeline {
+  --mg-track-muted: #dce4ef;
+  --mg-track-blue: #2864e6;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 30px 22px 22px;
+  overflow: hidden;
+}
+.mg-tracking-rail {
+  position: absolute;
+  top: 48px;
+  left: 12.5%;
+  right: 12.5%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--mg-track-muted);
+  overflow: hidden;
+}
+.mg-tracking-rail-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22a06b, var(--mg-track-blue));
+  transition: width .3s ease;
+}
+.mg-tracking-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 9px;
+  padding: 0 5px;
+  color: #64748b;
+}
+.mg-tracking-node {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: #edf2f8;
+  color: #91a2b8;
+  box-shadow: 0 0 0 1px #dce4ef;
+}
+.mg-tracking-stage.is-complete .mg-tracking-node {
+  background: #22a06b;
+  color: #fff;
+  box-shadow: 0 0 0 1px #22a06b;
+}
+.mg-tracking-stage.is-active .mg-tracking-node {
+  background: var(--mg-track-blue);
+  box-shadow: 0 0 0 5px #e6efff;
+  color: #fff;
+}
+.mg-tracking-stage strong {
+  font-size: 12px;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.mg-tracking-stage.is-active strong { color: var(--mg-track-blue); }
+.mg-tracking-stage span { color: #94a3b8; font-size: 11px; }
+.mg-tracking-stage.is-complete span { color: #15803d; font-weight: 700; }
+
+@media (max-width: 560px) {
+  .mg-tracking-timeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 12px;
+    padding: 24px 12px;
+  }
+  .mg-tracking-rail { display: none; }
+}

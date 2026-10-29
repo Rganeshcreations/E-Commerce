@@ -43,12 +43,25 @@ public class AuthService {
             );
         }
 
-        // Public self-registration is restricted to customers.
-        if (request.getRole() != null
-                && !"CUSTOMER".equalsIgnoreCase(request.getRole().trim())) {
+        // Public registration permits customers and tenant applicants only.
+        String requestedRole = request.getRole() == null
+                ? "CUSTOMER"
+                : request.getRole().trim().toUpperCase(java.util.Locale.ROOT);
+
+        if (!"CUSTOMER".equals(requestedRole)
+                && !"TENANT_APPLICANT".equals(requestedRole)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Self-registration is available for customer accounts only"
+                    "Public registration is available for customers and tenant applicants only"
+            );
+        }
+
+        if ("TENANT_APPLICANT".equals(requestedRole)
+                && request.getTenantSlug() != null
+                && !request.getTenantSlug().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Tenant applicants must register before selecting an existing store"
             );
         }
 
@@ -102,7 +115,7 @@ public class AuthService {
             }
 
             user.setTenantId(null);
-            user.setRole("CUSTOMER");
+            user.setRole(requestedRole);
 
         } else {
             TenantLookupResponse tenant =
@@ -371,3 +384,4 @@ public class AuthService {
         }
     }
 }
+

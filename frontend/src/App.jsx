@@ -1,10 +1,10 @@
+﻿import "./order-tracking.css";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw, UserRound, Store as StoreIcon, Building2
-} from "lucide-react";
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw, UserRound, Store as StoreIcon, Building2, CheckCircle2 } from "lucide-react";
 import "./index.css";
 import { api } from "./services/api";
 import VendorDashboard from "./pages/VendorDashboard";
@@ -50,53 +50,36 @@ function useCartCount() {
 }
 
 function getProductImage(product) {
-  if (product?.imageUrl && String(product.imageUrl).trim()) {
-    return product.imageUrl;
-  }
+  const uploaded = String(product?.imageUrl || product?.imageURL || "").trim();
+  if (/^https?:\/\/\S+$/i.test(uploaded)) return uploaded;
 
   const name = String(product?.productName || product?.name || "").toLowerCase();
+  const category = String(product?.category || product?.categoryName || "").toLowerCase();
+  const text = `${name} ${category}`;
 
-  const imageByProduct = [
-    {
-      keywords: ["laptop", "computer", "notebook", "pc"],
-      url: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["phone", "mobile", "iphone", "smartphone"],
-      url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["headphone", "headset", "earphone", "earbud", "airpod"],
-      url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["battery", "power bank", "charger"],
-      url: "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["watch", "smartwatch"],
-      url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["fruit", "apple", "banana", "orange", "mango"],
-      url: "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["vegetable", "vegetables", "tomato", "potato", "onion"],
-      url: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      keywords: ["medicine", "tablet", "capsule", "medical"],
-      url: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80"
-    }
+  // Match specific products before broader categories.
+  const rules = [
+    { words: ["rice", "basmati", "sona masoori", "grain"], url: "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=800&q=80" },
+    { words: ["banana"], url: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=800&q=80" },
+    { words: ["apple"], url: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?auto=format&fit=crop&w=800&q=80" },
+    { words: ["mango"], url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=800&q=80" },
+    { words: ["orange"], url: "https://images.unsplash.com/photo-1547514701-42782101795e?auto=format&fit=crop&w=800&q=80" },
+    { words: ["tomato"], url: "https://images.unsplash.com/photo-1546094096-0df4bcaaa337?auto=format&fit=crop&w=800&q=80" },
+    { words: ["potato"], url: "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=800&q=80" },
+    { words: ["onion"], url: "https://images.unsplash.com/photo-1508747703725-719777637510?auto=format&fit=crop&w=800&q=80" },
+    { words: ["headphone", "headset", "earphone", "earbud", "airpod"], url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80" },
+    { words: ["laptop", "computer", "notebook", "pc"], url: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80" },
+    { words: ["phone", "mobile", "iphone", "smartphone"], url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80" },
+    { words: ["battery"], url: "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=800&q=80" },
+    { words: ["power bank", "charger"], url: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=800&q=80" },
+    { words: ["watch", "smartwatch"], url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80" },
+    { words: ["medicine", "tablet", "capsule", "medical"], url: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80" },
+    { words: ["vegetable", "vegetables"], url: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80" },
+    { words: ["fruit", "fruits"], url: "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=800&q=80" }
   ];
 
-  const match = imageByProduct.find(item =>
-    item.keywords.some(keyword => name.includes(keyword))
-  );
-
-  return match?.url ||
-    "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80";
+  const match = rules.find(rule => rule.words.some(word => text.includes(word)));
+  return match?.url || "";
 }
 function formatINR(amount) {
   return new Intl.NumberFormat("en-IN", {
@@ -363,19 +346,19 @@ function Login() {
         <div className="login-role-switch" role="group" aria-label="Choose account type">
           <button type="button" className={accountType === "CUSTOMER" ? "active" : ""}
             onClick={() => { setAccountType("CUSTOMER"); setError(""); }}>
-            <span className="login-role-icon">♙</span><span>Customer</span>
+            <UserRound className="login-role-icon" size={22} aria-hidden="true" /><span>Customer</span>
           </button>
           <button type="button" className={accountType === "VENDOR" ? "active" : ""}
             onClick={() => { setAccountType("VENDOR"); setError(""); }}>
-            <span className="login-role-icon">▣</span><span>Vendor</span>
+            <StoreIcon className="login-role-icon" size={22} aria-hidden="true" /><span>Vendor</span>
           </button>
           <button type="button" className={accountType === "TENANT_ADMIN" ? "active" : ""}
             onClick={() => { setAccountType("TENANT_ADMIN"); setError(""); }}>
-            <span className="login-role-icon">⬡</span><span>Tenant Admin</span>
+            <Building2 className="login-role-icon" size={22} aria-hidden="true" /><span>Tenant Admin</span>
           </button>
           <button type="button" className={accountType === "SUPER_ADMIN" ? "active" : ""}
             onClick={() => { setAccountType("SUPER_ADMIN"); setError(""); }}>
-            <span className="login-role-icon">♛</span><span>Super Admin</span>
+            <ShieldCheck className="login-role-icon" size={22} aria-hidden="true" /><span>Super Admin</span>
           </button>
         </div>
 
@@ -485,7 +468,8 @@ function Register() {
         await api.register({
           fullName: form.fullName.trim(),
           email: form.email.trim().toLowerCase(),
-          password: form.password
+          password: form.password,
+          role: "TENANT_APPLICANT"
         });
         // Step 2: sign in with that same account before submitting the store application.
         const session = await api.login({
@@ -683,7 +667,7 @@ navigate("/vendor", { replace: true });
                 </small>
               )}
               {!loadingOptions && !optionsError && availableDomains.length === 0 && (
-                <small>No available domains yet. Super Admin must create a domain in Admin → Tenants.</small>
+                <small>No available domains yet. Super Admin must create a domain in Admin â†’ Tenants.</small>
               )}
               {!loadingOptions && availableDomains.length > 0 && (
                 <small>{availableDomains.length} domain(s) available to request.</small>
@@ -843,7 +827,7 @@ function CustomerDashboard() {
       >
 
         {[
-          [Package, "Orders", catalogLoading ? "—" : customerOrders.length, "View your purchases"],
+          [Package, "Orders", catalogLoading ? "â€”" : customerOrders.length, "View your purchases"],
           [ShoppingCart, "Cart Items", cartCount, "Items waiting for checkout"],
           [Eye, "Wishlist", "0", "Saved products"],
           [Truck, "Saved Addresses", "0", "Manage delivery addresses"]
@@ -1936,7 +1920,7 @@ function Checkout() {
             ORDER CONFIRMED
           </span>
 
-          <h1>{paymentStatus === "PENDING" ? "Order Confirmed — Pay on Delivery" : "Payment Successful"}</h1>
+          <h1>{paymentStatus === "PENDING" ? "Order Confirmed â€” Pay on Delivery" : "Payment Successful"}</h1>
 
           <p>
             {paymentStatus === "PENDING"
@@ -2893,34 +2877,97 @@ function OrderDetails() {
           </span>
         </div>
 
-        <div className="order-items">
+        <div style={{ padding: "8px 22px 18px" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0,1fr) auto",
+            gap: 12,
+            padding: "10px 0",
+            color: "#64748b",
+            fontSize: 12,
+            fontWeight: 700,
+            borderBottom: "1px solid #e8edf5"
+          }}>
+            <span>PRODUCT DETAILS</span>
+            <span style={{ textAlign: "right" }}>AMOUNT</span>
+          </div>
+
           {(order.items || []).map((item, index) => (
-            <div
-              key={index}
-              className="order-card"
-              style={{ marginBottom: "10px" }}
-            >
-              <div className="order-main">
-                <strong>Product #{item.productId}</strong>
-                <span>
-                  Vendor #{item.vendorId}
-                  {"  "}
+            <div key={index} style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0,1fr) auto",
+              alignItems: "center",
+              gap: 14,
+              padding: "16px 0",
+              borderBottom: index < (order.items || []).length - 1 ? "1px solid #edf1f7" : "none"
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <strong style={{ display: "block", color: "#17233c", fontSize: 14 }}>
+                  Product #{item.productId}
+                </strong>
+                <span style={{
+                  display: "block",
+                  marginTop: 5,
+                  color: "#64748b",
+                  fontSize: 12
+                }}>
+                  Vendor #{item.vendorId} <span style={{ margin: "0 6px" }}>·</span>
                   Quantity: {item.quantity}
                 </span>
-
-                <strong>
-                  &#8377;{Number(item.price || 0).toLocaleString("en-IN")}
-                </strong>
+                <span style={{
+                  display: "inline-block",
+                  marginTop: 7,
+                  background: "#f1f5f9",
+                  color: "#475569",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  fontSize: 11
+                }}>
+                  Unit price: {formatINR(item.price)}
+                </span>
               </div>
+              <strong style={{
+                color: "#17233c",
+                fontSize: 15,
+                textAlign: "right",
+                whiteSpace: "nowrap"
+              }}>
+                {formatINR(Number(item.price || 0) * Number(item.quantity || 0))}
+              </strong>
             </div>
           ))}
         </div>
 
-        <div className="summary-total">
-          <span>Total Amount</span>
-          <strong>
-            &#8377;{Number(order.totalAmount || 0).toLocaleString("en-IN")}
-          </strong>
+        <div style={{
+          margin: "0 22px 22px",
+          padding: "18px 20px",
+          background: "#f8faff",
+          border: "1px solid #e5ecfb",
+          borderRadius: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap"
+        }}>
+          <div>
+            <span style={{ display: "block", color: "#64748b", fontSize: 12 }}>
+              TOTAL ORDER AMOUNT
+            </span>
+            <strong style={{ display: "block", marginTop: 4, color: "#17233c", fontSize: 24 }}>
+              {formatINR(order.totalAmount)}
+            </strong>
+          </div>
+          <span style={{
+            padding: "7px 12px",
+            borderRadius: 20,
+            background: "#eaf2ff",
+            color: "#245fe5",
+            fontSize: 11,
+            fontWeight: 800
+          }}>
+            {order.status}
+          </span>
         </div>
       </div>
 
@@ -2932,24 +2979,35 @@ function OrderDetails() {
           </div>
         </div>
 
-        <div className="orders-list">
-          {steps.map((step, index) => (
-            <div className="order-card" key={step}>
-              <div className="order-icon">
-                <Package size={22}/>
-              </div>
+        <div className="mg-tracking-timeline">
+          <div className="mg-tracking-rail" aria-hidden="true">
+            <div
+              className="mg-tracking-rail-fill"
+              style={{
+                width: `${steps.length > 1 ? (currentStep / (steps.length - 1)) * 100 : 0}%`
+              }}
+            />
+          </div>
 
-              <div className="order-main">
+          {steps.map((step, index) => {
+            const complete = index <= currentStep;
+            const active = index === currentStep;
+
+            return (
+              <div
+                key={step}
+                className={`mg-tracking-stage ${complete ? "is-complete" : ""} ${active ? "is-active" : ""}`}
+              >
+                <div className="mg-tracking-node">
+                  {complete
+                    ? <span className="mg-tracking-check">✓</span>
+                    : <Package size={21} />}
+                </div>
                 <strong>{step}</strong>
-
-                <span>
-                  {index <= currentStep
-                    ? "Completed"
-                    : "Pending"}
-                </span>
+                <span>{complete ? "Completed" : "Pending"}</span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -3250,6 +3308,14 @@ function App() {
   );
 }
 export default App;
+
+
+
+
+
+
+
+
 
 
 
