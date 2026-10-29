@@ -41,7 +41,8 @@ public class SecurityConfig {
                 // All other application endpoints require SUPER_ADMIN.
                 .requestMatchers("/api/tenant-applications/**").hasRole("SUPER_ADMIN")
 
-                // Existing tenant management protection.
+                // Domain and tenant management are restricted to platform administrators.
+                .requestMatchers("/api/domains", "/api/domains/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/tenants", "/api/tenants/**").hasRole("SUPER_ADMIN")
 
                 .anyRequest().denyAll()
