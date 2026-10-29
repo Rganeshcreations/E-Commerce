@@ -119,3 +119,209 @@
   .tenant-modal-actions .tenant-button { width:100%; }
 }
 @media (prefers-reduced-motion:reduce) { .tenant-spin,.tenant-loading>span { animation:none; } .tenant-button,.tenant-table tbody tr { transition:none; } }
+
+
+/* Readability and visual polish pass: larger type, clearer hierarchy, richer cards. */
+.tenants-page {
+  padding-top: 28px;
+  font-size: 15px;
+}
+.tenants-page-header h1 {
+  font-size: clamp(32px, 3.2vw, 40px);
+  letter-spacing: -0.04em;
+}
+.tenants-page-header p {
+  max-width: 720px;
+  font-size: 16px;
+}
+.tenants-eyebrow {
+  font-size: 12px;
+}
+.tenant-button {
+  min-height: 42px;
+  padding: 10px 15px;
+  font-size: 14px;
+}
+.tenant-stat-grid {
+  gap: 18px;
+  margin-bottom: 26px;
+}
+.tenant-stat-card {
+  position: relative;
+  overflow: hidden;
+  padding: 23px;
+  border-radius: 17px;
+  box-shadow: 0 5px 18px rgb(24 39 75 / 4%);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.tenant-stat-card::after {
+  position: absolute;
+  right: -24px;
+  bottom: -35px;
+  width: 105px;
+  height: 105px;
+  border: 16px solid rgb(49 95 206 / 5%);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+.tenant-stat-card:hover {
+  transform: translateY(-3px);
+  border-color: #d5e0f2;
+  box-shadow: 0 12px 26px rgb(24 39 75 / 8%);
+}
+.tenant-stat-icon {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 17px;
+}
+.tenant-stat-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+.tenant-stat-value {
+  margin-top: 8px;
+  font-size: 35px;
+}
+.tenant-stat-note {
+  margin-top: 7px;
+  font-size: 13px;
+}
+.tenant-panel {
+  margin-bottom: 26px;
+  border-radius: 17px;
+  box-shadow: 0 5px 18px rgb(24 39 75 / 3%);
+}
+.tenant-panel-header {
+  padding: 25px 26px 22px;
+}
+.tenant-panel-header h2 {
+  font-size: 21px;
+}
+.tenant-panel-header p {
+  font-size: 14px;
+}
+.tenant-section-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+}
+.tenant-count {
+  min-width: 29px;
+  height: 27px;
+  font-size: 13px;
+}
+.tenant-toolbar {
+  padding: 18px 25px;
+}
+.tenant-search,
+.tenant-filter {
+  height: 46px;
+}
+.tenant-search input,
+.tenant-filter select {
+  font-size: 14px;
+}
+.tenant-table th {
+  padding: 15px 20px;
+  font-size: 12px;
+  letter-spacing: .07em;
+}
+.tenant-table td {
+  padding: 18px 20px;
+  font-size: 14px;
+}
+.tenant-person {
+  gap: 13px;
+  min-width: 210px;
+}
+.tenant-avatar {
+  flex-basis: 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+.tenant-cell-stack {
+  gap: 6px;
+}
+.tenant-cell-stack strong {
+  font-size: 14px;
+}
+.tenant-cell-stack span {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.tenant-primary-text {
+  font-size: 14px;
+}
+.tenant-slug {
+  max-width: 220px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.tenant-id {
+  font-size: 13px;
+}
+.tenant-status {
+  padding: 8px 11px;
+  font-size: 12px;
+}
+.tenant-row-actions {
+  gap: 9px;
+}
+.tenant-panel-footer {
+  padding: 16px 25px;
+  font-size: 13px;
+}
+.tenant-empty h3 {
+  font-size: 17px;
+}
+.tenant-empty p {
+  font-size: 14px;
+}
+.tenant-notice {
+  padding: 14px 16px;
+  font-size: 14px;
+}
+.tenant-modal {
+  width: min(100%, 520px);
+  padding: 30px;
+}
+.tenant-modal h2 {
+  font-size: 24px;
+}
+.tenant-modal>p {
+  font-size: 15px;
+}
+.tenant-reason-label,
+.tenant-modal textarea {
+  font-size: 14px;
+}
+.tenant-character-count {
+  font-size: 12px;
+}
+@media (max-width: 1050px) {
+  .tenant-table th { padding: 14px 16px; }
+  .tenant-table td { padding: 16px; }
+}
+@media (max-width: 640px) {
+  .tenants-page-header h1 { font-size: 30px; }
+  .tenants-page-header p { font-size: 14px; }
+  .tenant-stat-card { padding: 15px; }
+  .tenant-stat-label { font-size: 13px; }
+  .tenant-stat-value { font-size: 28px; }
+  .tenant-stat-note { font-size: 12px; }
+  .tenant-panel-header { padding: 18px 15px; }
+  .tenant-panel-header h2 { font-size: 18px; }
+  .tenant-panel-header p { font-size: 13px; }
+  .tenant-toolbar { padding: 13px 14px; }
+  .tenant-table th { font-size: 11px; }
+  .tenant-table td { font-size: 13px; }
+  .tenant-cell-stack strong { font-size: 13px; }
+  .tenant-cell-stack span { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tenant-stat-card { transition: none; }
+  .tenant-stat-card:hover { transform: none; }
+}
