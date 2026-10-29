@@ -33,7 +33,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/tenants/slug/**").permitAll()
+                .requestMatchers("/api/tenants/slug/**", "/api/tenants/active").permitAll()
 
                 // Public access only to application submission.
                 .requestMatchers(HttpMethod.POST, "/api/tenant-applications").permitAll()
@@ -41,7 +41,8 @@ public class SecurityConfig {
                 // All other application endpoints require SUPER_ADMIN.
                 .requestMatchers("/api/tenant-applications/**").hasRole("SUPER_ADMIN")
 
-                // Existing tenant management protection.
+                // Domain and tenant management are restricted to platform administrators.
+                .requestMatchers("/api/domains", "/api/domains/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/tenants", "/api/tenants/**").hasRole("SUPER_ADMIN")
 
                 .anyRequest().denyAll()

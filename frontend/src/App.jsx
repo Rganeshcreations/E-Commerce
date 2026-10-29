@@ -1,9 +1,9 @@
 ﻿import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
-  LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
+  LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck, Layers,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
-  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
+  Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2, RefreshCw, Building2
 } from "lucide-react";
 import "./index.css";
 import VendorDashboard from "./pages/VendorDashboard";
@@ -11,6 +11,7 @@ import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
 import AdminManagement from "./pages/AdminManagement";
 import TenantsPage from "./pages/Tenants";
+import DomainsPage from "./pages/Domains";
 import AdminUsers from "./pages/AdminUsers";
 import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
@@ -165,6 +166,7 @@ function Sidebar({ role, open, onClose }) {
     ? [
         ["/admin", LayoutDashboard, "Platform Overview"],
         ["/admin/tenants", Store, "Tenants"],
+        ["/admin/domains", Layers, "Domains"],
         ["/admin/users", Users, "Users"],
         ["/admin/vendors", Users, "Vendors"],
         ["/admin/products", Package, "Products"],
@@ -246,7 +248,6 @@ function Login() {
   const [loginRole, setLoginRole] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -254,58 +255,54 @@ function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       const response = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
+          email: email.trim().toLowerCase(),
           password,
-          ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
         })
       });
-
       const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `Login failed (HTTP ${response.status})`
-        );
+        throw new Error(data.message || data.error || `Login failed (HTTP ${response.status})`);
       }
+      if (!data?.token || !data?.role) throw new Error("Login response is missing the token or role.");
+      if (data.role !== loginRole) throw new Error("This account does not match the selected account type.");
 
       localStorage.setItem("marketgrid_token", data.token);
       localStorage.setItem("marketgrid_role", data.role);
-      localStorage.setItem("marketgrid_user_id", data.userId);
-      localStorage.setItem("marketgrid_customer_id", data.userId);
-      localStorage.setItem("marketgrid_tenant", data.tenantId);
+      localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_customer_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+      localStorage.setItem("marketgrid_email", data.email || email.trim().toLowerCase());
 
-      if (data.role === "SUPER_ADMIN") navigate("/admin");
-      else if (data.role === "TENANT_ADMIN") navigate("/tenant");
-      else if (data.role === "VENDOR") navigate("/vendor");
-      else navigate("/customer");
-
+      const homes = {
+        SUPER_ADMIN: "/admin",
+        TENANT_ADMIN: "/tenant",
+        VENDOR: "/vendor",
+        CUSTOMER: "/shop"
+      };
+      navigate(homes[data.role] || "/login", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to sign in.");
     } finally {
       setLoading(false);
     }
   }
+
   const roles = [
-    ["CUSTOMER", "\u{1F464}", "Customer"],
-    ["VENDOR", "\u{1F3EA}", "Vendor"],
-    ["TENANT_ADMIN", "\u{1F6E1}\u{FE0F}", "Tenant Admin"],
-    ["SUPER_ADMIN", "\u{1F451}", "Super Admin"]
+    { value: "CUSTOMER", label: "Customer", Icon: Users },
+    { value: "VENDOR", label: "Vendor", Icon: Store },
+    { value: "TENANT_ADMIN", label: "Tenant Admin", Icon: Building2 },
+    { value: "SUPER_ADMIN", label: "Super Admin", Icon: ShieldCheck }
   ];
-  const selectedRole =
-    roles.find(r => r[0] === loginRole)?.[2] || "Customer";
+  const selectedRole = roles.find((item) => item.value === loginRole)?.label || "Customer";
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-
+      <div className="auth-card register-card login-card">
         <div className="auth-brand">
           <div className="brand-mark">M</div>
           <div>
@@ -315,88 +312,60 @@ function Login() {
         </div>
 
         <h1>Welcome back</h1>
-        <p className="muted">
-          Sign in to continue to your workspace.
-        </p>
+        <p className="muted">Sign in to continue to your workspace.</p>
 
-        <div className="login-role-grid">
-          {roles.map(([value, icon, label]) => (
+        <div className="register-role-switch login-role-switch" role="tablist" aria-label="Account type">
+          {roles.map(({ value, label, Icon }) => (
             <button
               type="button"
+              role="tab"
+              aria-selected={loginRole === value}
               key={value}
-              className={
-                loginRole === value
-                  ? "login-role active"
-                  : "login-role"
-              }
-              onClick={() => setLoginRole(value)}
+              className={loginRole === value ? "active" : ""}
+              onClick={() => { setLoginRole(value); setError(""); }}
             >
-              <span>{icon}</span>
-              <small>{label}</small>
+              <Icon size={21} strokeWidth={1.8} />
+              <span>{label}</span>
             </button>
           ))}
         </div>
 
         <form onSubmit={submit} className="auth-form">
-
           <label>
             Email
             <input
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              autoComplete="username"
               required
             />
           </label>
-
-          {loginRole !== "SUPER_ADMIN" && (
-            <label>
-              Store Slug
-              <input
-                type="text"
-                value={tenantSlug}
-                onChange={e => setTenantSlug(e.target.value)}
-                placeholder="e.g. marketgrid-test-20261024"
-                required
-              />
-            </label>
-          )}
 
           <label>
             Password
             <input
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              autoComplete="current-password"
               required
             />
           </label>
 
-          {error && (
-            <div className="info-box">
-              {error}
-            </div>
-          )}
+          {error && <div className="registration-message error" role="alert">{error}</div>}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Signing in..."
-              : `Sign In as ${selectedRole}`}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : `Sign In as ${selectedRole}`}
           </button>
-
         </form>
 
         <p className="auth-footer">
           Don't have an account?{" "}
           <Link to="/register">Register</Link>
         </p>
-
       </div>
     </div>
   );
@@ -405,14 +374,43 @@ function Login() {
 function Register() {
   const navigate = useNavigate();
   const [role, setRole] = useState("CUSTOMER");
+  const [stores, setStores] = useState([]);
+  const [storesLoading, setStoresLoading] = useState(false);
+  const [storesError, setStoresError] = useState("");
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
-    tenantSlug: ""
+    confirmPassword: "",
+    tenantSlug: "",
+    businessName: "",
+    storeName: "",
+    requestedSlug: ""
   });
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStores() {
+      setStoresLoading(true);
+      setStoresError("");
+      try {
+        const response = await fetch(`${API}/api/tenants/active`);
+        const data = await response.json().catch(() => []);
+        if (!response.ok) throw new Error(data.message || data.error || `Could not load stores (HTTP ${response.status})`);
+        const items = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
+        if (!cancelled) setStores(items.filter((tenant) => tenant.active === true || tenant.active === "true"));
+      } catch (error) {
+        if (!cancelled) setStoresError(error.message || "Unable to load active stores.");
+      } finally {
+        if (!cancelled) setStoresLoading(false);
+      }
+    }
+    loadStores();
+    return () => { cancelled = true; };
+  }, []);
 
   function updateField(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -421,39 +419,84 @@ function Register() {
   async function submit(e) {
     e.preventDefault();
     setMessage("");
+    if (!isTenantApplication && form.password !== form.confirmPassword) {
+      setMessage("Passwords do not match.");
+      setMessageType("error");
+      return;
+    }
+    if (!isTenantApplication && form.password.length < 8) {
+      setMessage("Password must contain at least 8 characters.");
+      setMessageType("error");
+      return;
+    }
+    if (role === "VENDOR" && !form.tenantSlug) {
+      setMessage("Select an active store to apply to.");
+      setMessageType("error");
+      return;
+    }
+
     setLoading(true);
-
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
+      if (isTenantApplication) {
+        const response = await fetch(`${API}/api/tenant-applications`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicantName: form.fullName.trim(),
+            applicantEmail: form.email.trim().toLowerCase(),
+            storeName: form.storeName.trim(),
+            requestedSlug: form.requestedSlug.trim().toLowerCase()
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || data.error || `Application failed (HTTP ${response.status})`);
+        setMessage("Your store application was submitted for Super Admin review. The login account is created after the approval workflow is completed.");
+        setMessageType("success");
+        setForm({ fullName: "", email: "", password: "", confirmPassword: "", tenantSlug: "", businessName: "", storeName: "", requestedSlug: "" });
+        return;
       }
 
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
+      if (isVendor) {
+        throw new Error("The vendor application API is not implemented yet. Your details have not been submitted or registered.");
+      }
 
-      setTimeout(() => navigate("/login"), 1200);
-
+      const response = await fetch(`${API}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+          role,
+          tenantSlug: role === "VENDOR" ? form.tenantSlug : (stores[0]?.slug || "")
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || `Registration failed (HTTP ${response.status})`);
+      setMessage(role === "VENDOR"
+        ? "Your vendor registration was received. Note: vendor approval must be completed by the store administrator."
+        : "Registration successful. You can now sign in.");
+      setMessageType("success");
+      if (role === "CUSTOMER") setTimeout(() => navigate("/login"), 1200);
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Unable to complete registration.");
+      setMessageType("error");
     } finally {
       setLoading(false);
     }
   }
 
+  const roles = [
+    { value: "CUSTOMER", label: "Customer", Icon: Users },
+    { value: "VENDOR", label: "Vendor", Icon: Store },
+    { value: "TENANT_ADMIN", label: "Tenant", Icon: Building2 }
+  ];
+  const isTenantApplication = role === "TENANT_ADMIN";
+  const isVendor = role === "VENDOR";
+
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-card register-card">
         <div className="auth-brand">
           <div className="brand-mark">M</div>
           <div>
@@ -462,94 +505,111 @@ function Register() {
           </div>
         </div>
 
-        <h1>Create your account</h1>
+        <h1>{isTenantApplication ? "Apply for a store" : "Create your account"}</h1>
         <p className="muted">
-          Join MarketGrid as a customer or vendor.
+          {isTenantApplication
+            ? "Request a new store on the MarketGrid marketplace."
+            : "Join MarketGrid as a customer or vendor."}
         </p>
 
-        <div className="role-switch">
-          <button
-            type="button"
-            className={role === "CUSTOMER" ? "active" : ""}
-            onClick={() => setRole("CUSTOMER")}
-          >
-            Customer
-          </button>
-
-          <button
-            type="button"
-            className={role === "VENDOR" ? "active" : ""}
-            onClick={() => setRole("VENDOR")}
-          >
-            Vendor
-          </button>
+        <div className="register-role-switch" role="tablist" aria-label="Account type">
+          {roles.map(({ value, label, Icon }) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={role === value}
+              key={value}
+              className={role === value ? "active" : ""}
+              onClick={() => { setRole(value); setMessage(""); }}
+            >
+              <Icon size={21} strokeWidth={1.8} />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
 
         <form onSubmit={submit} className="auth-form">
           <label>
             Full Name
-            <input
-              name="fullName"
-              value={form.fullName}
-              onChange={updateField}
-              placeholder="Enter your full name"
-              required
-            />
+            <input name="fullName" value={form.fullName} onChange={updateField}
+              placeholder="Enter your full name" autoComplete="name" required />
           </label>
 
           <label>
             Email
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={updateField}
-              placeholder="you@example.com"
-              required
-            />
-          </label>
-          <label>
-            Store Slug
-            <input
-              name="tenantSlug"
-              value={form.tenantSlug}
-              onChange={updateField}
-              placeholder="e.g. marketgrid-test-20261024"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={updateField}
-              placeholder="Create a password"
-              required
-              minLength="6"
-            />
+            <input type="email" name="email" value={form.email} onChange={updateField}
+              placeholder="you@example.com" autoComplete="email" required />
           </label>
 
-          {role === "VENDOR" && (
-            <div className="info-box">
-              Vendor accounts can manage products and inventory after
-              approval by the tenant administrator.
-            </div>
+          {isTenantApplication ? (
+            <>
+              <label>
+                Store Name
+                <input name="storeName" value={form.storeName} onChange={updateField}
+                  placeholder="e.g. Amaravati Medicines" maxLength={100} required />
+              </label>
+              <label>
+                Requested Store Slug
+                <input name="requestedSlug" value={form.requestedSlug} onChange={updateField}
+                  placeholder="e.g. amaravati-medicines" pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*"
+                  title="Use letters, numbers, and single hyphens only." maxLength={100} required />
+              </label>
+              <div className="info-box">
+                Your application will be reviewed by the Super Admin. The store is created only after approval.
+              </div>
+            </>
+          ) : (
+            <>
+              <label>
+                Password
+                <input type="password" name="password" value={form.password} onChange={updateField}
+                  placeholder="At least 8 characters" autoComplete="new-password" minLength={8} required />
+              </label>
+              <label>
+                Confirm Password
+                <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={updateField}
+                  placeholder="Re-enter your password" autoComplete="new-password" minLength={8} required />
+              </label>
+              {isVendor && (
+                <>
+                  <label>
+                    Store you want to join
+                    <select name="tenantSlug" value={form.tenantSlug} onChange={updateField} required>
+                      <option value="">{storesLoading ? "Loading active stores..." : "Select an active store"}</option>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.slug}>{store.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {storesError && <p className="registration-help error">{storesError}</p>}
+                  {!storesLoading && !storesError && stores.length === 0 && (
+                    <p className="registration-help">No active stores are currently available. Please try again later.</p>
+                  )}
+                  <label>
+                    Business Name
+                    <input name="businessName" value={form.businessName} onChange={updateField}
+                      placeholder="Your shop or business name" maxLength={100} required />
+                  </label>
+                  <p className="registration-help">Vendor access is not created immediately. The store administrator must review your application.</p>
+                </>
+              )}
+              {!isVendor && (
+                <p className="registration-help">Create your customer account to shop from active MarketGrid stores.</p>
+              )}
+            </>
           )}
 
           {message && (
-            <div className="info-box">
+            <div className={`registration-message ${messageType}`} role={messageType === "error" ? "alert" : "status"}>
               {message}
             </div>
           )}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Creating account..." : `Create ${role === "VENDOR" ? "Vendor" : "Customer"} Account`}
+          <button className="primary-btn full" type="submit"
+            disabled={loading || (isVendor && (storesLoading || stores.length === 0))}>
+            {loading
+              ? (isTenantApplication ? "Submitting application..." : "Submitting...")
+              : (isTenantApplication ? "Submit Tenant Application" : isVendor ? "Submit Vendor Application" : "Create Customer Account")}
           </button>
         </form>
 
@@ -561,6 +621,7 @@ function Register() {
     </div>
   );
 }
+
 function CustomerDashboard() {
   const { role } = useAuth();
   const navigate = useNavigate();
@@ -2080,19 +2141,100 @@ function Checkout() {
 }
 
 function Vendors() {
+  const [vendors, setVendors] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  async function loadVendors() {
+    setLoading(true);
+    setError("");
+    const token = localStorage.getItem("marketgrid_token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const [vendorResponse, productResponse] = await Promise.all([
+        fetch(`${API}/api/vendors`, { headers }),
+        fetch(`${API}/api/products`, { headers })
+      ]);
+      if (!vendorResponse.ok) throw new Error(`Could not load vendors (HTTP ${vendorResponse.status}).`);
+      const vendorData = await vendorResponse.json();
+      const productData = productResponse.ok ? await productResponse.json() : [];
+      if (!Array.isArray(vendorData)) throw new Error("Vendor API returned an unexpected response.");
+      setVendors(vendorData);
+      setProducts(Array.isArray(productData) ? productData : []);
+    } catch (e) {
+      setError(e.message || "Unable to load vendor information.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadVendors(); }, []);
+
+  const activeCount = vendors.filter(v => String(v.status || "ACTIVE").toUpperCase() === "ACTIVE").length;
+  const filteredVendors = vendors.filter(v => {
+    const q = search.trim().toLowerCase();
+    return !q || [v.businessName, v.vendorName, v.name, v.email, v.id]
+      .some(value => String(value ?? "").toLowerCase().includes(q));
+  });
+  const countProducts = vendor => {
+    if (Array.isArray(vendor.products)) return vendor.products.length;
+    return products.filter(p =>
+      Number(p.vendorId ?? p.vendor?.id) === Number(vendor.id)
+    ).length;
+  };
+
   return (
-    <div className="content">
-      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore independent sellers operating on MarketGrid."/>
-      <div className="vendor-grid">
-        {demoVendors.map(v=>(
-          <div className="vendor-card" key={v.id}>
-            <div className="vendor-avatar">{v.name[0]}</div>
-            <div><h3>{v.name}</h3><p>{v.email}</p></div>
-            <span className="badge green">{v.status}</span>
-            <div className="vendor-meta"><span>{v.products} products</span><button className="secondary-btn small">View Store</button></div>
-          </div>
-        ))}
+    <div className="content vendors-page">
+      <PageHead
+        eyebrow="MARKETPLACE SELLERS"
+        title="Trusted vendors"
+        description="Explore independent sellers operating on MarketGrid."
+        action={<button className="secondary-btn" onClick={loadVendors} disabled={loading}><RefreshCw size={16}/> Refresh</button>}
+      />
+
+      <div className="vendor-summary">
+        <article><span className="vendor-summary-icon blue"><Store size={19}/></span><div><small>Registered vendors</small><strong>{loading ? "—" : vendors.length}</strong></div></article>
+        <article><span className="vendor-summary-icon green"><ShieldCheck size={19}/></span><div><small>Active vendors</small><strong>{loading ? "—" : activeCount}</strong></div></article>
+        <article><span className="vendor-summary-icon purple"><Package size={19}/></span><div><small>Listed products</small><strong>{loading ? "—" : products.length}</strong></div></article>
       </div>
+
+      <section className="vendors-catalogue">
+        <div className="vendors-catalogue-head">
+          <div><h2>Seller directory</h2><p>Vendor details are loaded from MarketGrid APIs.</p></div>
+          <label className="vendors-search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vendors..."/></label>
+        </div>
+
+        {error && <div className="error-box" role="alert">{error}<button className="secondary-btn small" onClick={loadVendors}>Try again</button></div>}
+
+        {loading ? (
+          <div className="vendors-state"><RefreshCw size={24}/><strong>Loading vendors...</strong><span>Fetching the latest seller directory.</span></div>
+        ) : !error && filteredVendors.length === 0 ? (
+          <div className="vendors-state"><Store size={30}/><strong>{vendors.length ? "No vendors match your search" : "No vendors available yet"}</strong><span>{vendors.length ? "Try another name or email." : "Approved marketplace sellers will appear here."}</span></div>
+        ) : (
+          <div className="vendor-grid updated-vendor-grid">
+            {filteredVendors.map(v => {
+              const vendorName = v.businessName || v.vendorName || v.name || `Vendor #${v.id}`;
+              const status = String(v.status || "ACTIVE").toUpperCase();
+              return (
+                <article className="vendor-card updated-vendor-card" key={v.id}>
+                  <div className="updated-vendor-top">
+                    <div className="vendor-avatar updated-vendor-avatar">{vendorName.charAt(0).toUpperCase()}</div>
+                    <div className="updated-vendor-identity"><h3>{vendorName}</h3><p>{v.vendorName && v.businessName ? v.vendorName : (v.email || "MarketGrid seller")}</p></div>
+                    <span className={`badge ${status === "ACTIVE" ? "green" : "orange"}`}>{status}</span>
+                  </div>
+                  <div className="updated-vendor-meta">
+                    <span>{countProducts(v)} {countProducts(v) === 1 ? "product" : "products"}</span>
+                    {v.email && <span className="updated-vendor-email">{v.email}</span>}
+                  </div>
+                  <div className="updated-vendor-footer"><span><Store size={14}/> MarketGrid seller</span><Link to="/shop/products" className="secondary-btn small">View products <ChevronRight size={14}/></Link></div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -2994,6 +3136,7 @@ function App() {
 
           <Route path="/admin" element={<Dashboard type="admin"/>}/>
           <Route path="/admin/tenants" element={<TenantsPage/>}/>
+          <Route path="/admin/domains" element={<DomainsPage/>}/>
           <Route path="/admin/users" element={<AdminUsers/>}/>
           <Route path="/admin/vendors" element={<AdminManagement type="vendors"/>}/>
           <Route path="/admin/products" element={<AdminManagement type="products"/>}/>

@@ -9,5 +9,5 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
 
     Optional<Tenant> findBySlug(String slug);
 
-    boolean existsBySlug(String slug);
+    boolean existsBySlug(String slug);\n\n    java.util.List<Tenant> findByActiveTrueOrderByNameAsc();
 }
