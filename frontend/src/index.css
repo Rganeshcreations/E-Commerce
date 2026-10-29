@@ -1181,3 +1181,37 @@
 }
 
 /* CHECKOUT UI END */
+
+/* Registration role selector supports Customer, Vendor, and Tenant Admin. */
+.register-role-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.register-role-switch button {
+  min-width: 0;
+  padding: 11px 6px;
+  white-space: normal;
+  line-height: 1.25;
+  font-size: 12px;
+}
+.registration-message {
+  border-radius: 9px;
+  padding: 12px 13px;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 4px 0 10px;
+}
+.registration-message.success {
+  color: #176b42;
+  background: #eaf8f0;
+  border: 1px solid #c8ecd8;
+}
+.registration-message.error {
+  color: #b42318;
+  background: #fff1f0;
+  border: 1px solid #ffd5d2;
+}
+@media (max-width: 420px) {
+  .register-role-switch button { font-size: 11px; padding: 10px 3px; }
+}
