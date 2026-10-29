@@ -1,15 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   Package, Boxes, RefreshCw, ShoppingBag, IndianRupee,
-  Plus, Store, AlertCircle, CheckCircle2
+  Plus, Store, AlertCircle, CheckCircle2, Pencil, Trash2, PackagePlus, X, Save
 } from "lucide-react";
 import { api } from "../services/api";
+import { useApp } from "../context/AppContext";
 
 const money = value => Number(value || 0).toLocaleString("en-IN", {
   maximumFractionDigits: 2
 });
 
 export default function VendorProducts() {
+  const { logout } = useApp();
   const [products, setProducts] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [forms, setForms] = useState({});
@@ -18,6 +20,10 @@ export default function VendorProducts() {
   const [error, setError] = useState("");
   const [catalogError, setCatalogError] = useState("");
   const [message, setMessage] = useState("");
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [stockProduct, setStockProduct] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -116,6 +122,57 @@ export default function VendorProducts() {
     }
   };
 
+  const saveProduct = async (event) => {
+    event.preventDefault();
+    if (!editingProduct) return;
+
+    const price = Number(editingProduct.price);
+    const stockQuantity = Number(editingProduct.stockQuantity);
+
+    if (!editingProduct.productName?.trim() ||
+        !Number.isFinite(price) || price < 0 ||
+        !Number.isInteger(stockQuantity) || stockQuantity < 0) {
+      setError("Enter a product name, valid price, and non-negative whole-number stock.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateProduct(editingProduct.id, {
+        productName: editingProduct.productName.trim(),
+        description: editingProduct.description || "",
+        price,
+        stockQuantity,
+        status: editingProduct.status
+      });
+      setEditingProduct(null);
+      setMessage("Product updated successfully.");
+      await load();
+    } catch (e) {
+      setError(e.message || "Unable to update product.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeProduct = async (product) => {
+    if (!window.confirm(`Delete "${product.productName}"? This action may be permanent.`)) return;
+
+    setDeletingId(product.id);
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteProduct(product.id);
+      setMessage("Product deleted successfully.");
+      await load();
+    } catch (e) {
+      setError(e.message || "Unable to delete product.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
   return (
     <div style={{ minHeight: "100%", background: "#f5f7fb", padding: "36px 42px" }}>
       <div style={{
@@ -134,9 +191,15 @@ export default function VendorProducts() {
             Choose stock from your tenant catalog and set your selling price.
           </p>
         </div>
-        <button onClick={load} disabled={loading} style={secondaryButton}>
-          <RefreshCw size={16} /> {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={load} disabled={loading} style={secondaryButton}>
+            <RefreshCw size={16} /> {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button type="button" onClick={() => { logout(); window.location.assign("/login"); }}
+            style={{ ...secondaryButton, color: "#b42318", background: "#fff5f5", border: "1px solid #fecaca" }}>
+            Exit
+          </button>
+        </div>
       </div>
 
       {error && <Notice type="error">{error}</Notice>}
@@ -198,7 +261,7 @@ export default function VendorProducts() {
                     {item.description || "Product supplied by your tenant."}
                   </p>
                   <div style={{ marginBottom: 16, color: "#75839a", fontSize: 13 }}>
-                    Tenant wholesale price: <strong style={{ color: "#202d45" }}>₹{money(item.wholesalePrice)}</strong>
+                    Tenant wholesale price: <strong style={{ color: "#202d45" }}>â‚¹{money(item.wholesalePrice)}</strong>
                   </div>
 
                   <label style={fieldLabel} htmlFor={`quantity-${item.id}`}>Quantity to allocate</label>
@@ -209,7 +272,7 @@ export default function VendorProducts() {
                     onChange={event => updateForm(item.id, "quantity", event.target.value)}
                     style={fieldStyle}
                   />
-                  <label style={fieldLabel} htmlFor={`price-${item.id}`}>Your selling price (₹)</label>
+                  <label style={fieldLabel} htmlFor={`price-${item.id}`}>Your selling price (â‚¹)</label>
                   <input
                     id={`price-${item.id}`}
                     type="number" min="0" step="0.01"
@@ -272,13 +335,81 @@ export default function VendorProducts() {
                   {product.description || "Your store listing"}
                 </p>
                 <div style={{ color: "#17233c", fontSize: 21, fontWeight: 800 }}>
-                  ₹{money(product.price)}
+                  {"\u20B9"}{money(product.price)}
+                </div>
+                <div style={actionRow}>
+                  <button
+                    type="button"
+                    style={editButton}
+                    onClick={() => {
+                      setError("");
+                      setEditingProduct({ ...product });
+                    }}
+                  >
+                    <Pencil size={15} /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    style={deleteButton}
+                    disabled={deletingId === product.id}
+                    onClick={() => removeProduct(product)}
+                  >
+                    <Trash2 size={15} />
+                    {deletingId === product.id ? "Deleting..." : "Delete"}
+                  </button>
                 </div>
               </article>
             ))}
           </div>
         )}
       </section>
+      {editingProduct && (
+        <div style={modalOverlay} onClick={(event) => {
+          if (event.target === event.currentTarget && !saving) setEditingProduct(null);
+        }}>
+          <form style={modalCard} onSubmit={saveProduct}>
+            <div style={modalHeader}>
+              <div>
+                <h2 style={{ margin: 0, color: "#17233c" }}>Edit Product</h2>
+                <p style={sectionSubtitle}>{editingProduct.productName}</p>
+              </div>
+              <button type="button" style={iconButton}
+                onClick={() => setEditingProduct(null)} disabled={saving}
+                aria-label="Close edit dialog">
+                <X size={19} />
+              </button>
+            </div>
+
+            <label style={fieldLabel}>Product name</label>
+            <input style={fieldStyle} required maxLength={255}
+              value={editingProduct.productName || ""}
+              onChange={e => setEditingProduct(p => ({ ...p, productName: e.target.value }))} />
+
+            <label style={fieldLabel}>Description</label>
+            <textarea style={{ ...fieldStyle, minHeight: 90, resize: "vertical" }}
+              maxLength={1000} value={editingProduct.description || ""}
+              onChange={e => setEditingProduct(p => ({ ...p, description: e.target.value }))} />
+
+            <label style={fieldLabel}>Selling price (\u20B9)</label>
+            <input style={fieldStyle} type="number" min="0" step="0.01" required
+              value={editingProduct.price ?? ""}
+              onChange={e => setEditingProduct(p => ({ ...p, price: e.target.value }))} />
+
+            <label style={fieldLabel}>Current stock quantity</label>
+            <input style={fieldStyle} type="number" min="0" step="1" required
+              value={editingProduct.stockQuantity ?? 0}
+              onChange={e => setEditingProduct(p => ({ ...p, stockQuantity: e.target.value }))} />
+
+            <div style={modalActions}>
+              <button type="button" style={secondaryButton}
+                onClick={() => setEditingProduct(null)} disabled={saving}>Cancel</button>
+              <button type="submit" style={primaryButton} disabled={saving}>
+                <Save size={16} /> {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -369,3 +500,43 @@ const emptyStyle = {
   display: "grid", justifyItems: "center", padding: "38px 18px",
   textAlign: "center", color: "#8995a8"
 };
+
+const actionRow = {
+  display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18,
+  paddingTop: 14, borderTop: "1px solid #edf0f6"
+};
+const editButton = {
+  ...secondaryButton, flex: 1, padding: "9px 10px", fontSize: 12
+};
+const stockButton = {
+  ...editButton, color: "#166534", background: "#ecfdf3", borderColor: "#bbf7d0"
+};
+const deleteButton = {
+  ...editButton, color: "#b42318", background: "#fff5f5", borderColor: "#fecaca"
+};
+const modalOverlay = {
+  position: "fixed", inset: 0, zIndex: 1000,
+  background: "rgba(15, 23, 42, .55)", display: "grid",
+  placeItems: "center", padding: 16, overflowY: "auto"
+};
+const modalCard = {
+  width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto",
+  boxSizing: "border-box", padding: 24, background: "#fff",
+  border: "1px solid #e2e7ef", borderRadius: 20,
+  boxShadow: "0 24px 70px rgba(15, 23, 42, .22)"
+};
+const modalHeader = {
+  display: "flex", alignItems: "flex-start",
+  justifyContent: "space-between", gap: 16, marginBottom: 22
+};
+const modalActions = {
+  display: "flex", justifyContent: "flex-end",
+  gap: 10, flexWrap: "wrap", marginTop: 20
+};
+const iconButton = {
+  display: "grid", placeItems: "center", width: 38, height: 38,
+  borderRadius: 10, border: "1px solid #e2e7ef",
+  background: "#f8fafc", color: "#475569", cursor: "pointer"
+};
+
+
