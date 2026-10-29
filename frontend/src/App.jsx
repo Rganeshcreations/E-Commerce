@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useParams, Outlet } from "react-router-dom";
 import {
-  LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck,
+  LayoutDashboard, Package, ShoppingCart, Users, Store, Boxes, Truck, Layers,
   ShieldCheck, LogOut, Search, Bell, Settings, BarChart3, CreditCard,
   Menu, X, ChevronRight, Plus, Eye, Edit3, Trash2,RefreshCw
 } from "lucide-react";
@@ -11,6 +11,7 @@ import TenantManagement from "./pages/TenantManagement";
 import TenantVendors from "./pages/TenantVendors";
 import AdminManagement from "./pages/AdminManagement";
 import TenantsPage from "./pages/Tenants";
+import DomainsPage from "./pages/Domains";
 import AdminUsers from "./pages/AdminUsers";
 import VendorProducts from "./pages/VendorProducts";
 import VendorInventory from "./pages/VendorInventory";
@@ -165,6 +166,7 @@ function Sidebar({ role, open, onClose }) {
     ? [
         ["/admin", LayoutDashboard, "Platform Overview"],
         ["/admin/tenants", Store, "Tenants"],
+        ["/admin/domains", Layers, "Domains"],
         ["/admin/users", Users, "Users"],
         ["/admin/vendors", Users, "Vendors"],
         ["/admin/products", Package, "Products"],
@@ -2994,6 +2996,7 @@ function App() {
 
           <Route path="/admin" element={<Dashboard type="admin"/>}/>
           <Route path="/admin/tenants" element={<TenantsPage/>}/>
+          <Route path="/admin/domains" element={<DomainsPage/>}/>
           <Route path="/admin/users" element={<AdminUsers/>}/>
           <Route path="/admin/vendors" element={<AdminManagement type="vendors"/>}/>
           <Route path="/admin/products" element={<AdminManagement type="products"/>}/>
