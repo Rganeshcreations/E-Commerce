@@ -256,58 +256,55 @@ function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       const response = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
+          email: email.trim().toLowerCase(),
           password,
           ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
         })
       });
-
       const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-          data.error ||
-          `Login failed (HTTP ${response.status})`
-        );
+        throw new Error(data.message || data.error || `Login failed (HTTP ${response.status})`);
       }
+      if (!data?.token || !data?.role) throw new Error("Login response is missing the token or role.");
+      if (data.role !== loginRole) throw new Error("This account does not match the selected account type.");
 
       localStorage.setItem("marketgrid_token", data.token);
       localStorage.setItem("marketgrid_role", data.role);
-      localStorage.setItem("marketgrid_user_id", data.userId);
-      localStorage.setItem("marketgrid_customer_id", data.userId);
-      localStorage.setItem("marketgrid_tenant", data.tenantId);
+      localStorage.setItem("marketgrid_user_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_customer_id", String(data.userId ?? ""));
+      localStorage.setItem("marketgrid_tenant", String(data.tenantId ?? ""));
+      localStorage.setItem("marketgrid_email", data.email || email.trim().toLowerCase());
 
-      if (data.role === "SUPER_ADMIN") navigate("/admin");
-      else if (data.role === "TENANT_ADMIN") navigate("/tenant");
-      else if (data.role === "VENDOR") navigate("/vendor");
-      else navigate("/customer");
-
+      const homes = {
+        SUPER_ADMIN: "/admin",
+        TENANT_ADMIN: "/tenant",
+        VENDOR: "/vendor",
+        CUSTOMER: "/shop"
+      };
+      navigate(homes[data.role] || "/login", { replace: true });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to sign in.");
     } finally {
       setLoading(false);
     }
   }
+
   const roles = [
-    ["CUSTOMER", "\u{1F464}", "Customer"],
-    ["VENDOR", "\u{1F3EA}", "Vendor"],
-    ["TENANT_ADMIN", "\u{1F6E1}\u{FE0F}", "Tenant Admin"],
-    ["SUPER_ADMIN", "\u{1F451}", "Super Admin"]
+    { value: "CUSTOMER", label: "Customer", Icon: Users },
+    { value: "VENDOR", label: "Vendor", Icon: Store },
+    { value: "TENANT_ADMIN", label: "Tenant Admin", Icon: Building2 },
+    { value: "SUPER_ADMIN", label: "Super Admin", Icon: ShieldCheck }
   ];
-  const selectedRole =
-    roles.find(r => r[0] === loginRole)?.[2] || "Customer";
+  const selectedRole = roles.find((item) => item.value === loginRole)?.label || "Customer";
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-
+      <div className="auth-card register-card login-card">
         <div className="auth-brand">
           <div className="brand-mark">M</div>
           <div>
@@ -317,37 +314,33 @@ function Login() {
         </div>
 
         <h1>Welcome back</h1>
-        <p className="muted">
-          Sign in to continue to your workspace.
-        </p>
+        <p className="muted">Sign in to continue to your workspace.</p>
 
-        <div className="login-role-grid">
-          {roles.map(([value, icon, label]) => (
+        <div className="register-role-switch login-role-switch" role="tablist" aria-label="Account type">
+          {roles.map(({ value, label, Icon }) => (
             <button
               type="button"
+              role="tab"
+              aria-selected={loginRole === value}
               key={value}
-              className={
-                loginRole === value
-                  ? "login-role active"
-                  : "login-role"
-              }
-              onClick={() => setLoginRole(value)}
+              className={loginRole === value ? "active" : ""}
+              onClick={() => { setLoginRole(value); setError(""); }}
             >
-              <span>{icon}</span>
-              <small>{label}</small>
+              <Icon size={21} strokeWidth={1.8} />
+              <span>{label}</span>
             </button>
           ))}
         </div>
 
         <form onSubmit={submit} className="auth-form">
-
           <label>
             Email
             <input
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              autoComplete="username"
               required
             />
           </label>
@@ -358,8 +351,9 @@ function Login() {
               <input
                 type="text"
                 value={tenantSlug}
-                onChange={e => setTenantSlug(e.target.value)}
-                placeholder="e.g. marketgrid-test-20261024"
+                onChange={(e) => setTenantSlug(e.target.value)}
+                placeholder="Enter your store slug"
+                autoComplete="organization"
                 required
               />
             </label>
@@ -370,35 +364,24 @@ function Login() {
             <input
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              autoComplete="current-password"
               required
             />
           </label>
 
-          {error && (
-            <div className="info-box">
-              {error}
-            </div>
-          )}
+          {error && <div className="registration-message error" role="alert">{error}</div>}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Signing in..."
-              : `Sign In as ${selectedRole}`}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : `Sign In as ${selectedRole}`}
           </button>
-
         </form>
 
         <p className="auth-footer">
           Don't have an account?{" "}
           <Link to="/register">Register</Link>
         </p>
-
       </div>
     </div>
   );
