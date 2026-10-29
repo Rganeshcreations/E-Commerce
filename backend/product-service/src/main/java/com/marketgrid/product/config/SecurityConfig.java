@@ -40,7 +40,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        .requestMatchers(HttpMethod.GET, "/api/catalog")
+                        .requestMatchers(HttpMethod.GET, "/api/catalog", "/api/catalog/**")
                         .hasAnyRole("SUPER_ADMIN", "TENANT_ADMIN", "VENDOR")
 
                         .requestMatchers(HttpMethod.POST, "/api/catalog")
