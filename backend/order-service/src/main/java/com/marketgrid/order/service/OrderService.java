@@ -37,7 +37,7 @@ public class OrderService {
             Order order,
             String token) {
 
-        Long tenantId = requireTenant();
+        Long tenantId = TenantContext.getTenantId();
 
         Authentication authentication = currentAuthentication();
         String role = currentRole();
@@ -89,7 +89,7 @@ public class OrderService {
                 );
             }
 
-            if (!tenantId.equals(product.tenantId())) {
+            if (tenantId != null && !tenantId.equals(product.tenantId())) {
                 throw new RuntimeException(
                         "Product does not belong to current tenant"
                 );
@@ -148,7 +148,7 @@ public class OrderService {
             return orderRepository.findAll();
         }
 
-        Long tenantId = requireTenant();
+        Long tenantId = TenantContext.getTenantId();
 
         if ("VENDOR".equals(role)) {
             VendorResponse vendor = currentVendor();
