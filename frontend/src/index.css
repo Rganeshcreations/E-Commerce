@@ -1436,3 +1436,95 @@
     height: 18px;
   }
 }
+
+/* Updated marketplace vendor directory */
+.vendors-page .page-head { margin-bottom: 25px; }
+.vendor-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+  margin-bottom: 24px;
+}
+.vendor-summary article {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 90px;
+  padding: 18px;
+  border: 1px solid #e1e8f2;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .025);
+}
+.vendor-summary-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+}
+.vendor-summary-icon.blue { background: #edf4ff; color: #2563eb; }
+.vendor-summary-icon.green { background: #eaf8f0; color: #16834b; }
+.vendor-summary-icon.purple { background: #f3edff; color: #8054d6; }
+.vendor-summary article small { display: block; color: #718098; font-size: 12px; margin-bottom: 5px; }
+.vendor-summary article strong { display: block; color: #172033; font-size: 25px; line-height: 1.1; }
+.vendors-catalogue {
+  overflow: hidden;
+  border: 1px solid #e1e8f2;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, .025);
+}
+.vendors-catalogue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 21px 23px;
+  border-bottom: 1px solid #eaf0f6;
+}
+.vendors-catalogue-head h2 { margin: 0 0 6px; color: #172033; font-size: 18px; }
+.vendors-catalogue-head p { margin: 0; color: #718098; font-size: 12px; line-height: 1.5; }
+.vendors-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(100%, 270px);
+  padding: 0 12px;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #75849c;
+}
+.vendors-search input { width: 100%; min-width: 0; height: 40px; border: 0; outline: 0; background: transparent; color: #172033; font: inherit; font-size: 12px; }
+.updated-vendor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px; }
+.updated-vendor-card { display: flex; flex-direction: column; min-width: 0; padding: 20px; border: 1px solid #e0e7f1; border-radius: 14px; background: #fff; box-shadow: none; }
+.updated-vendor-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.updated-vendor-avatar { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; background: #edf3ff; color: #2563eb; font-size: 17px; font-weight: 800; }
+.updated-vendor-identity { min-width: 0; flex: 1; }
+.updated-vendor-identity h3 { margin: 0 0 5px; overflow-wrap: anywhere; color: #172033; font-size: 16px; }
+.updated-vendor-identity p { margin: 0; color: #718098; font-size: 12px; overflow-wrap: anywhere; }
+.updated-vendor-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 19px; padding-top: 15px; border-top: 1px solid #eaf0f6; color: #334155; font-size: 13px; }
+.updated-vendor-email { color: #718098; font-size: 11px; overflow-wrap: anywhere; text-align: right; }
+.updated-vendor-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; }
+.updated-vendor-footer > span { display: inline-flex; align-items: center; gap: 6px; color: #718098; font-size: 11px; }
+.updated-vendor-footer .secondary-btn { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.vendors-state { display: flex; min-height: 190px; align-items: center; justify-content: center; flex-direction: column; gap: 10px; padding: 24px; color: #718098; text-align: center; }
+.vendors-state svg { color: #2563eb; }
+.vendors-state strong { color: #172033; font-size: 15px; }
+.vendors-state span { font-size: 12px; }
+.vendors-catalogue > .error-box { margin: 18px; }
+@media (max-width: 760px) {
+  .vendor-summary { grid-template-columns: 1fr; gap: 10px; }
+  .vendor-summary article { min-height: 72px; padding: 13px 15px; }
+  .vendors-catalogue-head { align-items: stretch; flex-direction: column; padding: 17px; }
+  .vendors-search { width: auto; }
+  .updated-vendor-grid { grid-template-columns: 1fr; padding: 13px; }
+  .updated-vendor-card { padding: 16px; }
+}
+@media (max-width: 420px) {
+  .updated-vendor-meta { align-items: flex-start; flex-direction: column; }
+  .updated-vendor-email { text-align: left; }
+  .updated-vendor-footer { align-items: flex-start; flex-direction: column; }
+}
