@@ -112,6 +112,12 @@ export const api = {
       method: "PATCH"
     }),
 
+  // Domain management (Super Admin)
+  domains: () => request("/api/domains"),
+  createDomain: (body) => request("/api/domains", { method: "POST", body: JSON.stringify(body) }),
+  assignDomain: (domainId, tenantId) => request(`/api/domains/${domainId}/assign?tenantId=${tenantId}`, { method: "PATCH" }),
+  unassignDomain: (domainId) => request(`/api/domains/${domainId}/unassign`, { method: "PATCH" }),
+
   // Tenant applications
   tenantApplications: () =>
     request("/api/tenant-applications"),
