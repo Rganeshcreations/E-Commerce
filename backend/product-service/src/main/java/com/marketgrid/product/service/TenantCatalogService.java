@@ -55,7 +55,8 @@ public class TenantCatalogService {
                     tenantId, "ACTIVE");
         }
         if ("SUPER_ADMIN".equals(role)) {
-            return catalogRepository.findAll();
+            // Super admins must still be scoped to the explicitly selected tenant.
+            return catalogRepository.findAllByTenantIdOrderByIdDesc(tenantId);
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Catalog access denied");
     }
