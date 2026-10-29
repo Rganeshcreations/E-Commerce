@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Layers, Plus, RefreshCw, Search, Store, Unlink, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Layers, Plus, RefreshCw, Search, Store, Unlink, X, Building2, UserRound } from "lucide-react";
 import { api } from "../services/api";
 import "./Domains.css";
 
@@ -20,7 +20,9 @@ export default function DomainsPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [assignments, setAssignments] = useState({});
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [assigningDomain, setAssigningDomain] = useState(null);
+  const [selectedTenantId, setSelectedTenantId] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -40,13 +42,18 @@ export default function DomainsPage() {
 
   const assigned = domains.filter((d) => d.tenantId != null);
   const unassigned = domains.filter((d) => d.tenantId == null);
+  const availableTenants = tenants.filter((t) => !assigned.some((d) => Number(d.tenantId) === Number(t.id)));
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return domains.filter((d) =>
-      !q || [d.name, d.description, d.tenantName, d.tenantId, d.id]
-        .some((v) => String(v ?? "").toLowerCase().includes(q))
-    );
-  }, [domains, search]);
+    return domains.filter((d) => {
+      const matchesSearch = !q || [d.name, d.description, d.tenantName, d.tenantId, d.id]
+        .some((v) => String(v ?? "").toLowerCase().includes(q));
+      const matchesTab = activeTab === "ALL" ||
+        (activeTab === "ASSIGNED" ? d.tenantId != null : d.tenantId == null);
+      return matchesSearch && matchesTab;
+    });
+  }, [domains, search, activeTab]);
 
   async function createDomain(e) {
     e.preventDefault();
@@ -55,20 +62,25 @@ export default function DomainsPage() {
     try {
       await api.createDomain({ name: name.trim(), description: description.trim() });
       setName(""); setDescription(""); setShowForm(false);
-      setNotice("Domain created successfully.");
+      setNotice("Domain created successfully. It is currently unassigned.");
       await loadData();
     } catch (e) {
       setError(e?.message || "Could not create the domain.");
     } finally { setSaving(false); }
   }
 
-  async function assignDomain(domain) {
-    const tenantId = assignments[domain.id];
-    if (!tenantId) { setError("Select a tenant before assigning this domain."); return; }
+  async function assignDomain(e) {
+    e.preventDefault();
+    if (!assigningDomain || !selectedTenantId) {
+      setError("Choose a tenant to assign this domain.");
+      return;
+    }
     setSaving(true); setError(""); setNotice("");
     try {
-      await api.assignDomain(domain.id, tenantId);
-      setNotice(domain.name + " assigned successfully.");
+      await api.assignDomain(assigningDomain.id, selectedTenantId);
+      const tenant = tenants.find((t) => Number(t.id) === Number(selectedTenantId));
+      setNotice(assigningDomain.name + " assigned to " + (tenant?.name || "the selected tenant") + ".");
+      setAssigningDomain(null); setSelectedTenantId("");
       await loadData();
     } catch (e) {
       setError(e?.message || "Could not assign the domain.");
@@ -76,11 +88,11 @@ export default function DomainsPage() {
   }
 
   async function unassignDomain(domain) {
-    if (!window.confirm("Unassign " + domain.name + " from " + (domain.tenantName || "its tenant") + "?")) return;
+    if (!window.confirm("Unassign " + domain.name + " from " + (domain.tenantName || ("Tenant #" + domain.tenantId)) + "?")) return;
     setSaving(true); setError(""); setNotice("");
     try {
       await api.unassignDomain(domain.id);
-      setNotice(domain.name + " is now unassigned.");
+      setNotice(domain.name + " is now available for assignment.");
       await loadData();
     } catch (e) {
       setError(e?.message || "Could not unassign the domain.");
@@ -93,7 +105,7 @@ export default function DomainsPage() {
         <div>
           <p className="domains-eyebrow"><Layers size={15}/> PLATFORM CONFIGURATION</p>
           <h1>Domain management</h1>
-          <p>Create business domains and assign one domain to each tenant.</p>
+          <p>Create domains once, then review exactly which tenant owns each domain.</p>
         </div>
         <div className="domains-heading-actions">
           <button className="domain-btn secondary" onClick={loadData} disabled={loading}><RefreshCw size={16}/> Refresh</button>
@@ -105,35 +117,52 @@ export default function DomainsPage() {
       {notice && <div className="domain-notice success" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button onClick={() => setNotice("")} aria-label="Dismiss"><X size={16}/></button></div>}
 
       {showForm && <form className="domain-form" onSubmit={createDomain}>
-        <div className="domain-form-title"><div><h2>Create a domain</h2><p>Example: Medicines, Vegetables, Fruits, Groceries or Electronics.</p></div><button type="button" className="domain-icon-btn" onClick={() => setShowForm(false)} aria-label="Close form"><X size={18}/></button></div>
+        <div className="domain-form-title"><div><h2>Create a domain</h2><p>Add a marketplace category such as Medicines, Vegetables, Fruits, Groceries or Electronics.</p></div><button type="button" className="domain-icon-btn" onClick={() => setShowForm(false)} aria-label="Close form"><X size={18}/></button></div>
         <div className="domain-form-fields">
           <label>Domain name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="e.g. Medicines" required /></label>
-          <label>Description <span>(optional)</span><input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} placeholder="Products or services in this domain" /></label>
+          <label>Description <span>(optional)</span><input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} placeholder="What does this domain cover?" /></label>
         </div>
         <button className="domain-btn primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save domain"}</button>
       </form>}
 
       <section className="domain-stats">
-        <article><span className="domain-stat-icon blue"><Layers size={20}/></span><p>Total domains</p><strong>{domains.length}</strong><small>Created on the platform</small></article>
-        <article><span className="domain-stat-icon green"><CheckCircle2 size={20}/></span><p>Assigned domains</p><strong>{assigned.length}</strong><small>Linked to a tenant</small></article>
-        <article><span className="domain-stat-icon amber"><Store size={20}/></span><p>Unassigned domains</p><strong>{unassigned.length}</strong><small>Available for allocation</small></article>
-        <article><span className="domain-stat-icon purple"><Store size={20}/></span><p>Tenants</p><strong>{tenants.length}</strong><small>Registered stores</small></article>
+        <article><span className="domain-stat-icon blue"><Layers size={20}/></span><p>All domains</p><strong>{domains.length}</strong><small>In the domain catalogue</small></article>
+        <article><span className="domain-stat-icon green"><CheckCircle2 size={20}/></span><p>Assigned</p><strong>{assigned.length}</strong><small>Tenant name shown below</small></article>
+        <article><span className="domain-stat-icon amber"><Store size={20}/></span><p>Unassigned</p><strong>{unassigned.length}</strong><small>Available to allocate</small></article>
+        <article><span className="domain-stat-icon purple"><Building2 size={20}/></span><p>Tenants without a domain</p><strong>{availableTenants.length}</strong><small>Can receive an available domain</small></article>
       </section>
 
       <section className="domain-panel">
-        <div className="domain-panel-heading"><div><h2>All domains</h2><p>Review availability, assignment and tenant details.</p></div><label className="domain-search"><Search size={17}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search domain or tenant..."/></label></div>
-        {loading ? <div className="domain-empty">Loading domain records…</div> : filtered.length === 0 ? <div className="domain-empty">{domains.length === 0 ? "No domains have been created yet. Select Create domain to add the first one." : "No domains match your search."}</div> :
-          <div className="domain-table-wrap"><table className="domain-table"><thead><tr><th>DOMAIN</th><th>DESCRIPTION</th><th>ASSIGNMENT</th><th>TENANT</th><th>ACTIONS</th></tr></thead><tbody>
+        <div className="domain-panel-heading">
+          <div><h2>Domain catalogue</h2><p>All domains appear here. Assigned domains show their tenant; unassigned domains can be allocated from the action.</p></div>
+          <label className="domain-search"><Search size={17}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search domain or tenant..."/></label>
+        </div>
+        <div className="domain-tabs" role="tablist" aria-label="Filter domains">
+          <button className={activeTab === "ALL" ? "active" : ""} onClick={() => setActiveTab("ALL")}>All domains <span>{domains.length}</span></button>
+          <button className={activeTab === "ASSIGNED" ? "active" : ""} onClick={() => setActiveTab("ASSIGNED")}>Assigned <span>{assigned.length}</span></button>
+          <button className={activeTab === "UNASSIGNED" ? "active" : ""} onClick={() => setActiveTab("UNASSIGNED")}>Unassigned <span>{unassigned.length}</span></button>
+        </div>
+        {loading ? <div className="domain-empty">Loading domain records…</div> : filtered.length === 0 ? <div className="domain-empty">{domains.length === 0 ? "No domains have been created yet. Use Create domain to build the catalogue." : "No domains match this filter or search."}</div> :
+          <div className="domain-table-wrap"><table className="domain-table"><thead><tr><th>DOMAIN</th><th>DESCRIPTION</th><th>STATUS</th><th>ASSIGNED TENANT</th><th>ACTION</th></tr></thead><tbody>
             {filtered.map((domain) => <tr key={domain.id}>
               <td><div className="domain-name-cell"><span className="domain-row-icon"><Layers size={18}/></span><div><strong>{domain.name}</strong><small>Domain #{domain.id}</small></div></div></td>
               <td>{domain.description || "—"}</td>
               <td><span className={"domain-pill " + (domain.tenantId != null ? "assigned" : "available")}>{domain.tenantId != null ? "Assigned" : "Unassigned"}</span></td>
-              <td>{domain.tenantId != null ? <div className="domain-tenant"><strong>{domain.tenantName || "Tenant " + domain.tenantId}</strong><small>Tenant ID: {domain.tenantId}</small></div> : <select aria-label={"Assign " + domain.name} value={assignments[domain.id] || ""} onChange={(e) => setAssignments((old) => ({...old, [domain.id]: e.target.value}))}><option value="">Select tenant…</option>{tenants.map((t) => <option key={t.id} value={t.id}>{t.name} (#{t.id})</option>)}</select>}</td>
-              <td>{domain.tenantId != null ? <button className="domain-btn secondary small" onClick={() => unassignDomain(domain)} disabled={saving}><Unlink size={14}/> Unassign</button> : <button className="domain-btn primary small" onClick={() => assignDomain(domain)} disabled={saving || tenants.length === 0}><Store size={14}/> Assign</button>}</td>
+              <td>{domain.tenantId != null ? <div className="domain-tenant"><strong><Store size={14}/> {domain.tenantName || ("Tenant #" + domain.tenantId)}</strong><small>Tenant ID: {domain.tenantId}</small></div> : <span className="domain-unassigned-note">Not allocated to any tenant</span>}</td>
+              <td>{domain.tenantId != null ? <button className="domain-btn secondary small" onClick={() => unassignDomain(domain)} disabled={saving}><Unlink size={14}/> Unassign</button> : <button className="domain-btn primary small" onClick={() => { setAssigningDomain(domain); setSelectedTenantId(""); setError(""); }} disabled={saving || availableTenants.length === 0}><Store size={14}/> Assign tenant</button>}</td>
             </tr>)}
           </tbody></table></div>}
       </section>
-      <p className="domain-footnote">Rule: each tenant can have one domain, and a domain can be assigned to only one tenant. Domain assignments are stored by the Tenant Service.</p>
+      <p className="domain-footnote">Assignment rule: one domain per tenant and one tenant per domain. Use the Assigned filter to review existing ownership and Unassigned to see what is still available.</p>
+
+      {assigningDomain && <div className="domain-modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setAssigningDomain(null); }}>
+        <form className="domain-assign-modal" onSubmit={assignDomain}>
+          <div className="domain-form-title"><div><p className="domains-eyebrow"><UserRound size={14}/> DOMAIN ALLOCATION</p><h2>Assign {assigningDomain.name}</h2><p>Select a tenant that does not already have a domain.</p></div><button type="button" className="domain-icon-btn" onClick={() => setAssigningDomain(null)} aria-label="Close dialog"><X size={18}/></button></div>
+          <label className="domain-assign-label">Tenant<select value={selectedTenantId} onChange={(e) => setSelectedTenantId(e.target.value)} required><option value="">Choose a tenant…</option>{availableTenants.map((t) => <option key={t.id} value={t.id}>{t.name} · Tenant #{t.id}</option>)}</select></label>
+          {availableTenants.length === 0 && <p className="domain-modal-help">Every registered tenant already has a domain. Unassign a domain first if you need to move one.</p>}
+          <div className="domain-modal-actions"><button type="button" className="domain-btn secondary" onClick={() => setAssigningDomain(null)} disabled={saving}>Cancel</button><button type="submit" className="domain-btn primary" disabled={saving || !selectedTenantId}>{saving ? "Assigning…" : "Confirm assignment"}</button></div>
+        </form>
+      </div>}
     </main>
   );
 }
