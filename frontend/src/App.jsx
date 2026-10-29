@@ -489,6 +489,10 @@ function Register() {
         return;
       }
 
+      if (isVendor) {
+        throw new Error("The vendor application API is not implemented yet. Your details have not been submitted or registered.");
+      }
+
       const response = await fetch(`${API}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
