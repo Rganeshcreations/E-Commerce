@@ -131,6 +131,15 @@ export const api = {
       method: "DELETE"
     }),
 
+  // Tenant catalog: vendors can browse their own tenant's available stock.
+  tenantCatalog: () => request("/api/catalog"),
+
+  allocateCatalogProduct: (catalogId, body) =>
+    request(`/api/catalog/${catalogId}/allocate`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+
   // Vendors and tenant-scoped vendor applications
   vendors: () => request("/api/vendors"),
   myVendor: () => request("/api/vendors/me"),
