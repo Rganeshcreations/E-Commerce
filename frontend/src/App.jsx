@@ -2141,19 +2141,100 @@ function Checkout() {
 }
 
 function Vendors() {
+  const [vendors, setVendors] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  async function loadVendors() {
+    setLoading(true);
+    setError("");
+    const token = localStorage.getItem("marketgrid_token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const [vendorResponse, productResponse] = await Promise.all([
+        fetch(`${API}/api/vendors`, { headers }),
+        fetch(`${API}/api/products`, { headers })
+      ]);
+      if (!vendorResponse.ok) throw new Error(`Could not load vendors (HTTP ${vendorResponse.status}).`);
+      const vendorData = await vendorResponse.json();
+      const productData = productResponse.ok ? await productResponse.json() : [];
+      if (!Array.isArray(vendorData)) throw new Error("Vendor API returned an unexpected response.");
+      setVendors(vendorData);
+      setProducts(Array.isArray(productData) ? productData : []);
+    } catch (e) {
+      setError(e.message || "Unable to load vendor information.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadVendors(); }, []);
+
+  const activeCount = vendors.filter(v => String(v.status || "ACTIVE").toUpperCase() === "ACTIVE").length;
+  const filteredVendors = vendors.filter(v => {
+    const q = search.trim().toLowerCase();
+    return !q || [v.businessName, v.vendorName, v.name, v.email, v.id]
+      .some(value => String(value ?? "").toLowerCase().includes(q));
+  });
+  const countProducts = vendor => {
+    if (Array.isArray(vendor.products)) return vendor.products.length;
+    return products.filter(p =>
+      Number(p.vendorId ?? p.vendor?.id) === Number(vendor.id)
+    ).length;
+  };
+
   return (
-    <div className="content">
-      <PageHead eyebrow="MARKETPLACE SELLERS" title="Trusted vendors" description="Explore independent sellers operating on MarketGrid."/>
-      <div className="vendor-grid">
-        {demoVendors.map(v=>(
-          <div className="vendor-card" key={v.id}>
-            <div className="vendor-avatar">{v.name[0]}</div>
-            <div><h3>{v.name}</h3><p>{v.email}</p></div>
-            <span className="badge green">{v.status}</span>
-            <div className="vendor-meta"><span>{v.products} products</span><button className="secondary-btn small">View Store</button></div>
-          </div>
-        ))}
+    <div className="content vendors-page">
+      <PageHead
+        eyebrow="MARKETPLACE SELLERS"
+        title="Trusted vendors"
+        description="Explore independent sellers operating on MarketGrid."
+        action={<button className="secondary-btn" onClick={loadVendors} disabled={loading}><RefreshCw size={16}/> Refresh</button>}
+      />
+
+      <div className="vendor-summary">
+        <article><span className="vendor-summary-icon blue"><Store size={19}/></span><div><small>Registered vendors</small><strong>{loading ? "—" : vendors.length}</strong></div></article>
+        <article><span className="vendor-summary-icon green"><ShieldCheck size={19}/></span><div><small>Active vendors</small><strong>{loading ? "—" : activeCount}</strong></div></article>
+        <article><span className="vendor-summary-icon purple"><Package size={19}/></span><div><small>Listed products</small><strong>{loading ? "—" : products.length}</strong></div></article>
       </div>
+
+      <section className="vendors-catalogue">
+        <div className="vendors-catalogue-head">
+          <div><h2>Seller directory</h2><p>Vendor details are loaded from MarketGrid APIs.</p></div>
+          <label className="vendors-search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vendors..."/></label>
+        </div>
+
+        {error && <div className="error-box" role="alert">{error}<button className="secondary-btn small" onClick={loadVendors}>Try again</button></div>}
+
+        {loading ? (
+          <div className="vendors-state"><RefreshCw size={24}/><strong>Loading vendors...</strong><span>Fetching the latest seller directory.</span></div>
+        ) : !error && filteredVendors.length === 0 ? (
+          <div className="vendors-state"><Store size={30}/><strong>{vendors.length ? "No vendors match your search" : "No vendors available yet"}</strong><span>{vendors.length ? "Try another name or email." : "Approved marketplace sellers will appear here."}</span></div>
+        ) : (
+          <div className="vendor-grid updated-vendor-grid">
+            {filteredVendors.map(v => {
+              const vendorName = v.businessName || v.vendorName || v.name || `Vendor #${v.id}`;
+              const status = String(v.status || "ACTIVE").toUpperCase();
+              return (
+                <article className="vendor-card updated-vendor-card" key={v.id}>
+                  <div className="updated-vendor-top">
+                    <div className="vendor-avatar updated-vendor-avatar">{vendorName.charAt(0).toUpperCase()}</div>
+                    <div className="updated-vendor-identity"><h3>{vendorName}</h3><p>{v.vendorName && v.businessName ? v.vendorName : (v.email || "MarketGrid seller")}</p></div>
+                    <span className={`badge ${status === "ACTIVE" ? "green" : "orange"}`}>{status}</span>
+                  </div>
+                  <div className="updated-vendor-meta">
+                    <span>{countProducts(v)} {countProducts(v) === 1 ? "product" : "products"}</span>
+                    {v.email && <span className="updated-vendor-email">{v.email}</span>}
+                  </div>
+                  <div className="updated-vendor-footer"><span><Store size={14}/> MarketGrid seller</span><Link to="/shop/products" className="secondary-btn small">View products <ChevronRight size={14}/></Link></div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
