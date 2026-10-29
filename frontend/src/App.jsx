@@ -411,9 +411,12 @@ function Register() {
     fullName: "",
     email: "",
     password: "",
-    tenantSlug: ""
+    tenantSlug: "",
+    storeName: "",
+    requestedSlug: ""
   });
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
   const [loading, setLoading] = useState(false);
 
   function updateField(e) {
@@ -426,32 +429,61 @@ function Register() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ...form, role, tenantSlug: form.tenantSlug.trim() })
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status}): ${data.message || data.error || JSON.stringify(data)}`);
+      if (role === "TENANT_ADMIN") {
+        const response = await fetch(`${API}/api/tenant-applications`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicantName: form.fullName.trim(),
+            applicantEmail: form.email.trim().toLowerCase(),
+            storeName: form.storeName.trim(),
+            requestedSlug: form.requestedSlug.trim().toLowerCase()
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.message || data.error || `Application failed (HTTP ${response.status})`);
+        }
+        setMessage("Your store application was submitted for Super Admin review. This is an application, not a login account yet.");
+        setMessageType("success");
+        setForm({ fullName: "", email: "", password: "", tenantSlug: "", storeName: "", requestedSlug: "" });
+        return;
       }
 
-      setMessage(
-        "Registration successful. You can now sign in."
-      );
-
+      const response = await fetch(`${API}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+          role,
+          tenantSlug: form.tenantSlug.trim()
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || data.error || `Registration failed (HTTP ${response.status})`);
+      }
+      setMessage("Registration successful. You can now sign in.");
+      setMessageType("success");
       setTimeout(() => navigate("/login"), 1200);
-
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Unable to complete registration.");
+      setMessageType("error");
     } finally {
       setLoading(false);
     }
   }
+
+  const roles = [
+    ["CUSTOMER", "Customer"],
+    ["VENDOR", "Vendor"],
+    ["TENANT_ADMIN", "Tenant Admin"]
+  ];
+
+  const isTenantApplication = role === "TENANT_ADMIN";
+  const isVendor = role === "VENDOR";
 
   return (
     <div className="auth-page">
@@ -464,27 +496,24 @@ function Register() {
           </div>
         </div>
 
-        <h1>Create your account</h1>
+        <h1>{isTenantApplication ? "Apply for a store" : "Create your account"}</h1>
         <p className="muted">
-          Join MarketGrid as a customer or vendor.
+          {isTenantApplication
+            ? "Request a new store on the MarketGrid marketplace."
+            : "Join MarketGrid as a customer or vendor."}
         </p>
 
-        <div className="role-switch">
-          <button
-            type="button"
-            className={role === "CUSTOMER" ? "active" : ""}
-            onClick={() => setRole("CUSTOMER")}
-          >
-            Customer
-          </button>
-
-          <button
-            type="button"
-            className={role === "VENDOR" ? "active" : ""}
-            onClick={() => setRole("VENDOR")}
-          >
-            Vendor
-          </button>
+        <div className="role-switch register-role-switch">
+          {roles.map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              className={role === value ? "active" : ""}
+              onClick={() => { setRole(value); setMessage(""); }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <form onSubmit={submit} className="auth-form">
@@ -495,6 +524,7 @@ function Register() {
               value={form.fullName}
               onChange={updateField}
               placeholder="Enter your full name"
+              autoComplete="name"
               required
             />
           </label>
@@ -507,51 +537,84 @@ function Register() {
               value={form.email}
               onChange={updateField}
               placeholder="you@example.com"
+              autoComplete="email"
               required
-            />
-          </label>
-          <label>
-            Store Slug
-            <input
-              name="tenantSlug"
-              value={form.tenantSlug}
-              onChange={updateField}
-              placeholder="e.g. marketgrid-test-20261024"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={updateField}
-              placeholder="Create a password"
-              required
-              minLength="6"
             />
           </label>
 
-          {role === "VENDOR" && (
-            <div className="info-box">
-              Vendor accounts can manage products and inventory after
-              approval by the tenant administrator.
-            </div>
+          {isTenantApplication ? (
+            <>
+              <label>
+                Store Name
+                <input
+                  name="storeName"
+                  value={form.storeName}
+                  onChange={updateField}
+                  placeholder="e.g. Amaravati Medicines"
+                  maxLength={100}
+                  required
+                />
+              </label>
+              <label>
+                Requested Store Slug
+                <input
+                  name="requestedSlug"
+                  value={form.requestedSlug}
+                  onChange={updateField}
+                  placeholder="e.g. amaravati-medicines"
+                  pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*"
+                  title="Use letters, numbers, and single hyphens only."
+                  maxLength={100}
+                  required
+                />
+              </label>
+              <div className="info-box">
+                Your application will be reviewed by the Super Admin. The store is created only after approval.
+              </div>
+            </>
+          ) : (
+            <>
+              <label>
+                Store Slug
+                <input
+                  name="tenantSlug"
+                  value={form.tenantSlug}
+                  onChange={updateField}
+                  placeholder="Enter your existing store slug"
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  name="password"
+                  value={form.password}
+                  onChange={updateField}
+                  placeholder="Create a password"
+                  autoComplete="new-password"
+                  required
+                  minLength="6"
+                />
+              </label>
+              {isVendor && (
+                <div className="info-box">
+                  Vendor accounts can manage products and inventory after approval by the tenant administrator.
+                </div>
+              )}
+            </>
           )}
 
           {message && (
-            <div className="info-box">
+            <div className={`registration-message ${messageType}`} role={messageType === "error" ? "alert" : "status"}>
               {message}
             </div>
           )}
 
-          <button
-            className="primary-btn full"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Creating account..." : `Create ${role === "VENDOR" ? "Vendor" : "Customer"} Account`}
+          <button className="primary-btn full" type="submit" disabled={loading}>
+            {loading
+              ? (isTenantApplication ? "Submitting application..." : "Creating account...")
+              : (isTenantApplication ? "Submit Tenant Application" : `Create ${isVendor ? "Vendor" : "Customer"} Account`)}
           </button>
         </form>
 
@@ -563,6 +626,7 @@ function Register() {
     </div>
   );
 }
+
 function CustomerDashboard() {
   const { role } = useAuth();
   const navigate = useNavigate();
