@@ -248,7 +248,6 @@ function Login() {
   const [loginRole, setLoginRole] = useState("CUSTOMER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenantSlug, setTenantSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -263,7 +262,6 @@ function Login() {
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           password,
-          ...(loginRole === "SUPER_ADMIN" ? {} : { tenantSlug: tenantSlug.trim() })
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -344,20 +342,6 @@ function Login() {
               required
             />
           </label>
-
-          {loginRole !== "SUPER_ADMIN" && (
-            <label>
-              Store Slug
-              <input
-                type="text"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                placeholder="Enter your store slug"
-                autoComplete="organization"
-                required
-              />
-            </label>
-          )}
 
           <label>
             Password
